@@ -81,8 +81,18 @@ This yields a clean, linear history and makes `git bisect` and blame more effect
 In the context of a Swift package, we use the Swift CLI with commands like `swift build` or `swift test`
 If this does not apply, we can use the XCodeBuildMCP server
 
+Don't wait for approval when you need to execute commands to build and test the projet.
+
 --
 
 ## Swift documentation
 
 When needed we can use the Cupertino MCP to access the officiel Swift documentation and Apple coding guides.
+
+--
+
+## Docs index
+
+Add new documentation references here going forward.
+
+- `.codex/docs/sqlite-persistence.md` — SQLite persistence overview, usage, and extension notes
