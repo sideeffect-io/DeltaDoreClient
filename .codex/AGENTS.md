@@ -47,6 +47,8 @@ These emphasize modularity without unnecessary abstractions.
 
 This aligns with modern functional design patterns that emphasize clarity, testability, and correctness.
 
+Use Enums as a namespace for related free functions.
+
 ---
 
 ## Testability Patterns
@@ -57,7 +59,7 @@ We favor **function injection instead of object mocking**:
 - Inject only what a unit needs (small slices)
 - Pure core logic that can be tested with no environment dependencies
 
-We focus on unit tests (not integration tests)
+We focus on unit tests (not integration tests). Always use the Swift Testing framework.
 ---
 
 ## Git Workflow Summary
@@ -96,3 +98,4 @@ When needed we can use the Cupertino MCP to access the officiel Swift documentat
 Add new documentation references here going forward.
 
 - `.codex/docs/sqlite-persistence.md` — SQLite persistence overview, usage, and extension notes
+- `.codex/docs/tydom-connection.md` — TydomConnection execution plan, behavior, and usage
