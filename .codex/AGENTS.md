@@ -99,3 +99,4 @@ Add new documentation references here going forward.
 
 - `.codex/docs/sqlite-persistence.md` — SQLite persistence overview, usage, and extension notes
 - `.codex/docs/tydom-connection.md` — TydomConnection execution plan, behavior, and usage
+- `.codex/docs/tydom-commands.md` — TydomCommand mechanism, legacy factory list, and usage
