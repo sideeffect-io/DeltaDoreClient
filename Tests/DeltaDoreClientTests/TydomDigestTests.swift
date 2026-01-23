@@ -6,9 +6,13 @@ import Testing
 
 @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *)
 @Test func parseChallenge() throws {
+    // Given
     let header = "Digest realm=\"ServiceMedia\", nonce=\"abc123\", qop=\"auth\", opaque=\"xyz\""
+
+    // When
     let challenge = try DigestChallenge.parse(from: header)
 
+    // Then
     #expect(challenge.realm == "ServiceMedia")
     #expect(challenge.nonce == "abc123")
     #expect(challenge.qop == "auth")
@@ -17,6 +21,7 @@ import Testing
 
 @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *)
 @Test func authorizationHeaderUsesAuthQopAndExpectedResponse() throws {
+    // Given
     let challenge = DigestChallenge(
         realm: "protected area",
         nonce: "nonce-value",
@@ -29,6 +34,7 @@ import Testing
         return Array(bytes.prefix(count))
     }
 
+    // When
     let header = try DigestAuthorizationBuilder.build(
         challenge: challenge,
         username: "user",
@@ -43,6 +49,7 @@ import Testing
     let ha2 = md5Hex("GET:/mediation/client?mac=AA:BB&appli=1")
     let expected = md5Hex("\(ha1):nonce-value:00000001:\(cnonce):auth:\(ha2)")
 
+    // Then
     #expect(header.hasPrefix("Digest "))
     #expect(header.contains("username=\"user\""))
     #expect(header.contains("realm=\"protected area\""))
@@ -54,6 +61,7 @@ import Testing
 
 @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *)
 @Test func unsupportedAlgorithmThrows() {
+    // Given
     let challenge = DigestChallenge(
         realm: "ServiceMedia",
         nonce: "nonce",
@@ -63,6 +71,8 @@ import Testing
     )
 
     let randomBytes: @Sendable (Int) -> [UInt8] = { _ in [0] }
+
+    // When / Then
     #expect(throws: TydomConnection.ConnectionError.unsupportedAlgorithm("SHA-256")) {
         _ = try DigestAuthorizationBuilder.build(
             challenge: challenge,
@@ -77,6 +87,7 @@ import Testing
 
 @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *)
 @Test func unsupportedQopThrows() {
+    // Given
     let challenge = DigestChallenge(
         realm: "ServiceMedia",
         nonce: "nonce",
@@ -86,6 +97,8 @@ import Testing
     )
 
     let randomBytes: @Sendable (Int) -> [UInt8] = { _ in [0] }
+
+    // When / Then
     #expect(throws: TydomConnection.ConnectionError.unsupportedQop("auth-int")) {
         _ = try DigestAuthorizationBuilder.build(
             challenge: challenge,

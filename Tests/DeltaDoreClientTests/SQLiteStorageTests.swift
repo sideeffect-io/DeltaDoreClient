@@ -20,6 +20,7 @@ private struct Metadata: Codable, Sendable, Equatable {
 }
 
 @Test func sqliteCRUD() async throws {
+    // Given
     let database = try await SQLiteDatabase(path: ":memory:")
     try await database.execute(
         """
@@ -43,6 +44,7 @@ private struct Metadata: Codable, Sendable, Equatable {
         metadata: Metadata(lastLogin: date, tags: ["swift", "sqlite"])
     )
 
+    // When
     _ = try await dao.create(user)
     let fetched = try await dao.read(.integer(1))
     #expect(fetched == user)
@@ -69,6 +71,7 @@ private struct Metadata: Codable, Sendable, Equatable {
 }
 
 @Test func sqliteJoinRows() async throws {
+    // Given
     let database = try await SQLiteDatabase(path: ":memory:")
     try await database.execute("PRAGMA foreign_keys = ON")
     try await database.execute(
@@ -96,6 +99,7 @@ private struct Metadata: Codable, Sendable, Equatable {
     let userSchema = TableSchema<User>.codable(table: "users", primaryKey: "id")
     let userDao = DAO.make(database: database, schema: userSchema)
 
+    // When
     let rows = try await userDao.queryRows(
         """
         SELECT users.name AS userName, posts.title AS postTitle
@@ -110,6 +114,7 @@ private struct Metadata: Codable, Sendable, Equatable {
         (row.columns["userName"], row.columns["postTitle"])
     }
 
+    // Then
     #expect(result.count == 1)
     #expect(result[0].0 == .text("Ada"))
     #expect(result[0].1 == .text("Notes"))
