@@ -1,6 +1,6 @@
 ---
 name: functional-programming-developer
-description: Trigger this skill to fing guidance for applying functional architecture both in code and unit tests (immutability, pure functions, composition) in this Swift package with testability in mind.
+description: Trigger this skill to find guidance for applying functional architecture both in code and unit tests (immutability, pure functions, composition) in this Swift package with testability in mind.
 ---
 
 # Functional Architecture in Swift
@@ -22,7 +22,7 @@ Think functional programming first, object oriented programming next.
 
 - Pass only necessary functions into pure core logic instead of protocols. Use lazy closures for expensive resources.
 - Define small capability structs of closures as an encapsulation mechanism when too many functions should be passed.
-- Dependency structs of closures should be define close to where they're needed, probably in the same file.
+- Dependency structs of closures should be defined close to where they're needed, probably in the same file.
 - Concrete implementations of these structs of closures should be defined as extensions.
 - Avoid large mock protocols; use closures for easy test fakes.
 
