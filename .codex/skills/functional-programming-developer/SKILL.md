@@ -1,6 +1,6 @@
 ---
 name: functional-programming-developer
-description: Guidance for applying functional architecture (immutability, pure functions, composition) in this Swift package with testability in mind.
+description: Trigger this skill to fing guidance for applying functional architecture both in code and unit tests (immutability, pure functions, composition) in this Swift package with testability in mind.
 ---
 
 # Functional Architecture in Swift
@@ -15,13 +15,15 @@ Think functional programming first, object oriented programming next.
 - **Inert Domain**: Use `struct`/`enum` with `let` fields (immutable). Avoid global shared mutable state.
 - **Pure Computations**: Functions should be deterministic, highly testable and side-effect–free.
 - **Combinators**: Compose small functions to build pipelines.
-- **Higher order functions and Partial Application**: Inject dependencies as first-class functions.
-- **Declarative code** over Imperative code.
+- **Higher order functions and Partial Application**: Inject dependencies as first-class functions. Use structs of closures when there are too many functions to inject.
+- **Declarative code** over Imperative code. 
 
 ## How to do dependency injection in the context of functional programming
 
 - Pass only necessary functions into pure core logic instead of protocols. Use lazy closures for expensive resources.
-- Define small capability structs of closures as an encapsulation mechanism when too many functions should be passed
+- Define small capability structs of closures as an encapsulation mechanism when too many functions should be passed.
+- Dependency structs of closures should be define close to where they're needed, probably in the same file.
+- Concrete implementations of these structs of closures should be defined as extensions.
 - Avoid large mock protocols; use closures for easy test fakes.
 
 ## How to apply SOLID principles in the context of functional programming
@@ -34,10 +36,12 @@ Think functional programming first, object oriented programming next.
 
 ## How to test
 
-- Focus on unit tests (not integration tests)
-- Inject fake closures that record invocations
-- Use in-memory stores and fake clocks
-- Never rely on hard coded timers or sleep durations
+- Focus on unit tests (not integration tests).
+- Inject fake closures that record invocations.
+- Use in-memory stores and fake clocks.
+- Never rely on hard coded timers or sleep durations.
+- Always use the Swift Testing framework and group related tests into a Suite.
+- Include //Given //When //Then comments in a unit test flow to ease the reading.
 
 ## Edge Cases
 - If performance demands localized mutation, confine it and return a value.

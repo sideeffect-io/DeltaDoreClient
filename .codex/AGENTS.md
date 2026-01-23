@@ -16,6 +16,7 @@ Agents working with this repo (AI assistants, automation tools, or new team memb
 ## Plan
 
 For long reasoning operations and complex tasks we do an execution plan upfront and ask for validation.
+When executing the plan, you can use parallel tasks/sub-agents to optimize the execution and ask sub-agents to challenge you.
 
 ---
 
@@ -47,7 +48,9 @@ These emphasize modularity without unnecessary abstractions.
 
 This aligns with modern functional design patterns that emphasize clarity, testability, and correctness.
 
-Use Enums as a namespace for related free functions.
+- Use Enums as a namespace for related free functions.
+- A function should be max 30 lines of code, split it otherwise.
+- A file should be max 300 lines of code, split it otherwise (use composition and extensions).
 
 ---
 
@@ -58,8 +61,10 @@ We favor **function injection instead of object mocking**:
 - Capability structs of closures (e.g., network client, clock, logger)
 - Inject only what a unit needs (small slices)
 - Pure core logic that can be tested with no environment dependencies
+- We focus on unit tests (not integration tests).
+- Always use the Swift Testing framework.
+- Use the Given, When, Then pattern
 
-We focus on unit tests (not integration tests). Always use the Swift Testing framework.
 ---
 
 ## Git Workflow Summary
@@ -97,6 +102,8 @@ When needed we can use the Cupertino MCP to access the officiel Swift documentat
 
 Add new documentation references here going forward.
 
-- `.codex/docs/sqlite-persistence.md` — SQLite persistence overview, usage, and extension notes
-- `.codex/docs/tydom-connection.md` — TydomConnection execution plan, behavior, and usage
-- `.codex/docs/tydom-commands.md` — TydomCommand mechanism, legacy factory list, and usage
+- `docs/sqlite-persistence.md` — SQLite persistence overview, usage, and extension notes
+- `docs/tydom-connection.md` — TydomConnection execution plan, behavior, and usage
+- `docs/tydom-commands.md` — TydomCommand mechanism, legacy factory list, and usage
+- `docs/tydom-decoding.md` — Message decoding pipeline, cache dependencies, and usage
+- `docs/tydom-decoding.md` — Message decoding pipeline, cache dependencies, and usage

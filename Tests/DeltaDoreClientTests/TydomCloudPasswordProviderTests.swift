@@ -6,6 +6,7 @@ import Testing
 @Suite(.serialized) struct TydomCloudPasswordProviderTests {
     @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *)
     @Test func fetchGatewayPasswordSuccess() async throws {
+        // Given
         let session = makeMockSession()
         let mac = "AA:BB:CC:DD:EE:FF"
         let tokenEndpoint = "https://auth.example.com/token"
@@ -32,6 +33,7 @@ import Testing
         }
         defer { MockURLProtocol.clearHandler() }
 
+        // When
         let password = try await TydomCloudPasswordProvider.fetchGatewayPassword(
             email: "user@example.com",
             password: "secret",
@@ -39,11 +41,13 @@ import Testing
             session: session
         )
 
+        // Then
         #expect(password == "gw-pass")
     }
 
     @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *)
     @Test func fetchGatewayPasswordThrowsWhenGatewayNotFound() async {
+        // Given
         let session = makeMockSession()
         let mac = "AA:BB:CC:DD:EE:FF"
         let tokenEndpoint = "https://auth.example.com/token"
@@ -66,6 +70,7 @@ import Testing
         }
         defer { MockURLProtocol.clearHandler() }
 
+        // When
         let error = await #expect(throws: TydomCloudPasswordProvider.ProviderError.self) {
             _ = try await TydomCloudPasswordProvider.fetchGatewayPassword(
                 email: "user@example.com",
@@ -75,6 +80,7 @@ import Testing
             )
         }
 
+        // Then
         if let error {
             let isGatewayNotFound: Bool
             switch error {

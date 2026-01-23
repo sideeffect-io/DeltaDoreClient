@@ -5,12 +5,14 @@ import Testing
 
 @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *)
 @Test func configurationForRemoteUsesPrefixAndHost() {
+    // Given
     let config = TydomConnection.Configuration(
         mode: .remote(),
         mac: "AA:BB:CC:DD:EE:FF",
         password: "password"
     )
 
+    // When / Then
     #expect(config.commandPrefix == 0x02)
     #expect(config.host == "mediation.tydom.com")
     #expect(config.isRemote)
@@ -18,12 +20,14 @@ import Testing
 
 @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *)
 @Test func configurationForLocalHasNoPrefix() {
+    // Given
     let config = TydomConnection.Configuration(
         mode: .local(host: "example.local"),
         mac: "AA:BB:CC:DD:EE:FF",
         password: "password"
     )
 
+    // When / Then
     #expect(config.commandPrefix == nil)
     #expect(config.host == "example.local")
     #expect(config.isRemote == false)
@@ -31,6 +35,7 @@ import Testing
 
 @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *)
 @Test func sendWithoutConnectionThrows() async {
+    // Given
     let connection = TydomConnection(
         configuration: .init(
             mode: .local(host: "example.local"),
@@ -39,6 +44,7 @@ import Testing
         )
     )
 
+    // When / Then
     await #expect(throws: TydomConnection.ConnectionError.notConnected) {
         try await connection.send(Data())
     }
@@ -46,6 +52,7 @@ import Testing
 
 @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *)
 @Test func connectMissingCredentialsThrowsAndStillCreatesSession() async {
+    // Given
     let recorder = CallRecorder()
     let dependencies = TydomConnection.Dependencies(
         makeSession: { _, _ in
@@ -71,10 +78,12 @@ import Testing
         dependencies: dependencies
     )
 
+    // When
     await #expect(throws: TydomConnection.ConnectionError.missingCredentials) {
         try await connection.connect()
     }
 
+    // Then
     #expect(recorder.value("makeSession") == 1)
     #expect(recorder.value("fetchGatewayPassword") == 0)
     #expect(recorder.value("invalidateSession") == 0)
@@ -82,6 +91,7 @@ import Testing
 
 @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *)
 @Test func connectPropagatesGatewayPasswordError() async {
+    // Given
     let recorder = CallRecorder()
     let dependencies = TydomConnection.Dependencies(
         makeSession: { _, _ in
@@ -108,10 +118,12 @@ import Testing
         dependencies: dependencies
     )
 
+    // When
     await #expect(throws: TestError.fetchFailed) {
         try await connection.connect()
     }
 
+    // Then
     #expect(recorder.value("makeSession") == 1)
     #expect(recorder.value("fetchGatewayPassword") == 1)
     #expect(recorder.value("invalidateSession") == 0)
@@ -119,6 +131,7 @@ import Testing
 
 @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *)
 @Test func disconnectInvalidatesSessionAfterFailedConnect() async {
+    // Given
     let recorder = CallRecorder()
     let dependencies = TydomConnection.Dependencies(
         makeSession: { _, _ in
@@ -144,17 +157,20 @@ import Testing
         dependencies: dependencies
     )
 
+    // When
     await #expect(throws: TydomConnection.ConnectionError.missingCredentials) {
         try await connection.connect()
     }
 
     await connection.disconnect()
 
+    // Then
     #expect(recorder.value("invalidateSession") == 1)
 }
 
 @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *)
 @Test func deinitInvalidatesSession() async {
+    // Given
     let recorder = CallRecorder()
     let dependencies = TydomConnection.Dependencies(
         makeSession: { _, _ in
@@ -173,6 +189,7 @@ import Testing
 
     weak var weakConnection: TydomConnection?
 
+    // When
     do {
         let connection = TydomConnection(
             configuration: .init(
@@ -188,6 +205,8 @@ import Testing
     }
 
     await Task.yield()
+
+    // Then
     #expect(weakConnection == nil)
     #expect(recorder.value("makeSession") == 1)
     #expect(recorder.value("invalidateSession") == 1)
