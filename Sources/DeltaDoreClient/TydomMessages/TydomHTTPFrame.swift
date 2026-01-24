@@ -63,16 +63,16 @@ public struct TydomHTTPResponse: Sendable, Equatable {
     }
 }
 
-public struct TydomHTTPParser: Sendable {
-    public enum ParseError: Error, Sendable, Equatable {
+struct TydomHTTPParser: Sendable {
+    enum ParseError: Error, Sendable, Equatable {
         case missingHeaderSeparator
         case invalidStartLine
         case invalidStatusCode
     }
 
-    public init() {}
+    init() {}
 
-    public func parse(_ data: Data) -> Result<TydomHTTPFrame, ParseError> {
+    func parse(_ data: Data) -> Result<TydomHTTPFrame, ParseError> {
         let headerSeparator = Data([13, 10, 13, 10])
         guard let separatorRange = data.range(of: headerSeparator) else {
             return .failure(.missingHeaderSeparator)

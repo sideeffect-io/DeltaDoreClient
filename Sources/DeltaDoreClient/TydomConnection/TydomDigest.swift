@@ -1,7 +1,6 @@
 import CryptoKit
 import Foundation
 
-@available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *)
 struct DigestChallenge: Sendable {
     let realm: String
     let nonce: String
@@ -41,7 +40,6 @@ struct DigestChallenge: Sendable {
     }
 }
 
-@available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *)
 struct DigestAuthorizationBuilder {
     static func build(
         challenge: DigestChallenge,

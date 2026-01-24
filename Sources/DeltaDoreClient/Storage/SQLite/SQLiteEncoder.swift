@@ -1,26 +1,26 @@
 import Foundation
 
-public final class SQLiteEncoder: Encoder {
-    public var storage: [String: SQLiteValue] = [:]
-    public var codingPath: [CodingKey] = []
-    public var userInfo: [CodingUserInfoKey: Any] = [:]
+final class SQLiteEncoder: Encoder {
+    var storage: [String: SQLiteValue] = [:]
+    var codingPath: [CodingKey] = []
+    var userInfo: [CodingUserInfoKey: Any] = [:]
 
     private let options: SQLiteCodingOptions
 
-    public init(options: SQLiteCodingOptions = .default) {
+    init(options: SQLiteCodingOptions = .default) {
         self.options = options
     }
 
-    public func container<Key>(keyedBy: Key.Type) -> KeyedEncodingContainer<Key> {
+    func container<Key>(keyedBy: Key.Type) -> KeyedEncodingContainer<Key> {
         let container = SQLiteKeyedEncodingContainer<Key>(encoder: self)
         return KeyedEncodingContainer(container)
     }
 
-    public func unkeyedContainer() -> UnkeyedEncodingContainer {
+    func unkeyedContainer() -> UnkeyedEncodingContainer {
         SQLiteUnsupportedUnkeyedEncodingContainer(codingPath: codingPath)
     }
 
-    public func singleValueContainer() -> SingleValueEncodingContainer {
+    func singleValueContainer() -> SingleValueEncodingContainer {
         SQLiteUnsupportedSingleValueEncodingContainer(codingPath: codingPath)
     }
 

@@ -1,27 +1,27 @@
 import Foundation
 
-public struct SQLiteDecoder: Decoder {
-    public var codingPath: [CodingKey] = []
-    public var userInfo: [CodingUserInfoKey: Any] = [:]
+struct SQLiteDecoder: Decoder {
+    var codingPath: [CodingKey] = []
+    var userInfo: [CodingUserInfoKey: Any] = [:]
 
     private let row: Row
     private let options: SQLiteCodingOptions
 
-    public init(row: Row, options: SQLiteCodingOptions = .default) {
+    init(row: Row, options: SQLiteCodingOptions = .default) {
         self.row = row
         self.options = options
     }
 
-    public func container<Key>(keyedBy type: Key.Type) -> KeyedDecodingContainer<Key> {
+    func container<Key>(keyedBy type: Key.Type) -> KeyedDecodingContainer<Key> {
         let container = SQLiteKeyedDecodingContainer<Key>(decoder: self, row: row)
         return KeyedDecodingContainer(container)
     }
 
-    public func unkeyedContainer() throws -> UnkeyedDecodingContainer {
+    func unkeyedContainer() throws -> UnkeyedDecodingContainer {
         throw SQLiteError.unsupportedDecoding("Unkeyed decoding is not supported")
     }
 
-    public func singleValueContainer() throws -> SingleValueDecodingContainer {
+    func singleValueContainer() throws -> SingleValueDecodingContainer {
         throw SQLiteError.unsupportedDecoding("Single value decoding is not supported")
     }
 

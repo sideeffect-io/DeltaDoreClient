@@ -1,10 +1,10 @@
 import Foundation
 
-public struct SQLiteCodingOptions: Sendable {
-    public let jsonEncoder: @Sendable () -> JSONEncoder
-    public let jsonDecoder: @Sendable () -> JSONDecoder
+struct SQLiteCodingOptions: Sendable {
+    let jsonEncoder: @Sendable () -> JSONEncoder
+    let jsonDecoder: @Sendable () -> JSONDecoder
 
-    public init(
+    init(
         jsonEncoder: @escaping @Sendable () -> JSONEncoder = { JSONEncoder() },
         jsonDecoder: @escaping @Sendable () -> JSONDecoder = { JSONDecoder() }
     ) {
@@ -12,5 +12,5 @@ public struct SQLiteCodingOptions: Sendable {
         self.jsonDecoder = jsonDecoder
     }
 
-    public static let `default` = SQLiteCodingOptions()
+    static let `default` = SQLiteCodingOptions()
 }

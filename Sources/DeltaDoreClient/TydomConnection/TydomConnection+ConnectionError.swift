@@ -1,8 +1,7 @@
 import Foundation
 
-@available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *)
-public extension TydomConnection {
-    enum ConnectionError: Error, Sendable, Equatable {
+extension TydomConnection {
+    public enum ConnectionError: Error, Sendable, Equatable {
         case missingCredentials
         case missingPassword
         case missingChallenge

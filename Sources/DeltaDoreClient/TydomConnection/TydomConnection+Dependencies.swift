@@ -1,7 +1,6 @@
 import Foundation
 
-@available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *)
-public extension TydomConnection {
+extension TydomConnection {
     struct Dependencies: Sendable {
         var makeSession: @Sendable (_ allowInsecureTLS: Bool, _ timeout: TimeInterval) -> URLSession
         var randomBytes: @Sendable (_ count: Int) -> [UInt8]
@@ -23,7 +22,7 @@ public extension TydomConnection {
             self.invalidateSession = invalidateSession
         }
 
-        static public func live() -> Dependencies {
+        static func live() -> Dependencies {
             Dependencies(
                 makeSession: { allowInsecureTLS, timeout in
                     let configuration = URLSessionConfiguration.default

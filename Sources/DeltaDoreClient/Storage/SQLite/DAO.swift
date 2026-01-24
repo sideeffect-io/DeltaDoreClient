@@ -1,15 +1,15 @@
 import Foundation
 
-public struct DAO<Entity: Codable & Sendable>: Sendable {
-    public let create: @Sendable (Entity) async throws -> Entity
-    public let read: @Sendable (SQLiteValue) async throws -> Entity?
-    public let update: @Sendable (Entity) async throws -> Entity
-    public let delete: @Sendable (SQLiteValue) async throws -> Void
-    public let list: @Sendable () async throws -> [Entity]
-    public let query: @Sendable (String, [SQLiteValue]) async throws -> [Entity]
-    public let queryRows: @Sendable (String, [SQLiteValue]) async throws -> [Row]
+struct DAO<Entity: Codable & Sendable>: Sendable {
+    let create: @Sendable (Entity) async throws -> Entity
+    let read: @Sendable (SQLiteValue) async throws -> Entity?
+    let update: @Sendable (Entity) async throws -> Entity
+    let delete: @Sendable (SQLiteValue) async throws -> Void
+    let list: @Sendable () async throws -> [Entity]
+    let query: @Sendable (String, [SQLiteValue]) async throws -> [Entity]
+    let queryRows: @Sendable (String, [SQLiteValue]) async throws -> [Row]
 
-    public init(
+    init(
         create: @escaping @Sendable (Entity) async throws -> Entity,
         read: @escaping @Sendable (SQLiteValue) async throws -> Entity?,
         update: @escaping @Sendable (Entity) async throws -> Entity,
@@ -28,7 +28,7 @@ public struct DAO<Entity: Codable & Sendable>: Sendable {
     }
 }
 
-public extension DAO {
+extension DAO {
     static func make(
         database: SQLiteDatabase,
         schema: TableSchema<Entity>
