@@ -3,6 +3,10 @@ import Foundation
 public enum TydomMessage: Sendable, Equatable {
     case gatewayInfo(TydomGatewayInfo, transactionId: String?)
     case devices([TydomDevice], transactionId: String?)
+    case scenarios([TydomScenario], transactionId: String?)
+    case groups([TydomGroup], transactionId: String?)
+    case moments([TydomMoment], transactionId: String?)
+    case areas([TydomArea], transactionId: String?)
     case raw(TydomRawMessage)
 }
 
@@ -36,12 +40,63 @@ public struct TydomGatewayInfo: Sendable, Equatable {
     }
 }
 
-public struct TydomDeviceInfo: Sendable, Equatable {
+public struct TydomScenario: Sendable, Equatable {
+    public let id: Int
     public let name: String
-    public let usage: String
-    public let metadata: [String: JSONValue]?
+    public let type: String
+    public let picto: String
+    public let ruleId: String?
+    public let payload: [String: JSONValue]
 
-    public init(name: String, usage: String, metadata: [String: JSONValue]? = nil) {
+    public init(
+        id: Int,
+        name: String,
+        type: String,
+        picto: String,
+        ruleId: String?,
+        payload: [String: JSONValue]
+    ) {
+        self.id = id
+        self.name = name
+        self.type = type
+        self.picto = picto
+        self.ruleId = ruleId
+        self.payload = payload
+    }
+}
+
+public struct TydomGroup: Sendable, Equatable {
+    public let payload: [String: JSONValue]
+
+    public init(payload: [String: JSONValue]) {
+        self.payload = payload
+    }
+}
+
+public struct TydomMoment: Sendable, Equatable {
+    public let payload: [String: JSONValue]
+
+    public init(payload: [String: JSONValue]) {
+        self.payload = payload
+    }
+}
+
+public struct TydomArea: Sendable, Equatable {
+    public let id: Int?
+    public let payload: [String: JSONValue]
+
+    public init(id: Int?, payload: [String: JSONValue]) {
+        self.id = id
+        self.payload = payload
+    }
+}
+
+struct TydomDeviceInfo: Sendable, Equatable {
+    let name: String
+    let usage: String
+    let metadata: [String: JSONValue]?
+
+    init(name: String, usage: String, metadata: [String: JSONValue]? = nil) {
         self.name = name
         self.usage = usage
         self.metadata = metadata

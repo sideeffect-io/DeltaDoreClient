@@ -1,12 +1,12 @@
 import Foundation
 
-public struct TableSchema<Entity: Codable & Sendable>: Sendable {
-    public let table: String
-    public let primaryKey: String
-    public let encode: @Sendable (Entity) throws -> [String: SQLiteValue]
-    public let decode: @Sendable (Row) throws -> Entity
+struct TableSchema<Entity: Codable & Sendable>: Sendable {
+    let table: String
+    let primaryKey: String
+    let encode: @Sendable (Entity) throws -> [String: SQLiteValue]
+    let decode: @Sendable (Row) throws -> Entity
 
-    public init(
+    init(
         table: String,
         primaryKey: String,
         encode: @escaping @Sendable (Entity) throws -> [String: SQLiteValue],
@@ -19,7 +19,7 @@ public struct TableSchema<Entity: Codable & Sendable>: Sendable {
     }
 }
 
-public extension TableSchema {
+extension TableSchema {
     static func codable(
         table: String,
         primaryKey: String,

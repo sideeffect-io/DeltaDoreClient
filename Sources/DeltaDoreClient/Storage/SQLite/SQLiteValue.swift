@@ -1,6 +1,6 @@
 import Foundation
 
-public enum SQLiteValue: Sendable, Equatable {
+enum SQLiteValue: Sendable, Equatable {
     case null
     case integer(Int64)
     case real(Double)
@@ -8,7 +8,7 @@ public enum SQLiteValue: Sendable, Equatable {
     case blob(Data)
 }
 
-public extension SQLiteValue {
+extension SQLiteValue {
     var isNull: Bool {
         if case .null = self { return true }
         return false

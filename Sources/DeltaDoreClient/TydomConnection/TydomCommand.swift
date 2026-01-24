@@ -8,7 +8,7 @@ public struct TydomCommand: Sendable, Equatable {
     }
 }
 
-public extension TydomCommand {
+extension TydomCommand {
     enum Method: String, Sendable {
         case get = "GET"
         case put = "PUT"

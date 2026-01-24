@@ -18,12 +18,11 @@ import Foundation
 ///     }
 /// }
 ///
-/// let request = "GET /ping HTTP/1.1\\r\\n\\r\\n"
+/// let request = "GET /ping HTTP/1.1\r\n\r\n"
 /// try await connection.send(Data(request.utf8))
 /// ```
-@available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *)
 public actor TydomConnection {
-    private let configuration: Configuration
+    let configuration: Configuration
     private let dependencies: Dependencies
 
     private var session: URLSession?
@@ -32,8 +31,13 @@ public actor TydomConnection {
 
     private let messageStream: AsyncStream<Data>
     private var messageContinuation: AsyncStream<Data>.Continuation?
+    private let activityStore = TydomAppActivityStore()
 
-    public init(configuration: Configuration, dependencies: Dependencies = .live()) {
+    public init(configuration: Configuration) {
+        self.init(configuration: configuration, dependencies: .live())
+    }
+
+    init(configuration: Configuration, dependencies: Dependencies = .live()) {
         self.configuration = configuration
         self.dependencies = dependencies
 
@@ -52,6 +56,14 @@ public actor TydomConnection {
 
     public func messages() -> AsyncStream<Data> {
         messageStream
+    }
+
+    public func setAppActive(_ isActive: Bool) async {
+        await activityStore.setActive(isActive)
+    }
+
+    func isAppActive() async -> Bool {
+        await activityStore.isAppActive()
     }
 
     public func connect() async throws {

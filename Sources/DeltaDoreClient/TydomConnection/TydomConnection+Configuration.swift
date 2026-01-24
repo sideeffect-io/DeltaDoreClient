@@ -1,27 +1,42 @@
 import Foundation
 
-@available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *)
-public extension TydomConnection {
-    struct Configuration: Sendable {
-        enum Mode: Sendable {
+extension TydomConnection {
+    public struct Configuration: Sendable {
+        public struct Polling: Sendable {
+            public let intervalSeconds: Int
+            public let onlyWhenActive: Bool
+
+            public init(intervalSeconds: Int = 60, onlyWhenActive: Bool = true) {
+                self.intervalSeconds = intervalSeconds
+                self.onlyWhenActive = onlyWhenActive
+            }
+
+            public var isEnabled: Bool {
+                intervalSeconds > 0
+            }
+        }
+
+        public enum Mode: Sendable {
             case local(host: String)
             case remote(host: String = "mediation.tydom.com")
         }
 
-        let mode: Mode
-        let mac: String
-        let password: String?
-        let cloudCredentials: CloudCredentials?
-        let allowInsecureTLS: Bool
-        let timeout: TimeInterval
+        public let mode: Mode
+        public let mac: String
+        public let password: String?
+        public let cloudCredentials: CloudCredentials?
+        public let allowInsecureTLS: Bool
+        public let timeout: TimeInterval
+        public let polling: Polling
 
-        init(
+        public init(
             mode: Mode,
             mac: String,
             password: String? = nil,
             cloudCredentials: CloudCredentials? = nil,
             allowInsecureTLS: Bool? = nil,
-            timeout: TimeInterval = 10.0
+            timeout: TimeInterval = 10.0,
+            polling: Polling = Polling()
         ) {
             self.mode = mode
             self.mac = mac
@@ -29,6 +44,7 @@ public extension TydomConnection {
             self.cloudCredentials = cloudCredentials
             self.allowInsecureTLS = allowInsecureTLS ?? true
             self.timeout = timeout
+            self.polling = polling
         }
 
         var host: String {

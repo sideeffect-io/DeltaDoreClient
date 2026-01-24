@@ -1,6 +1,6 @@
 import Foundation
 
-public enum SQLiteError: Error, Sendable, Equatable {
+enum SQLiteError: Error, Sendable, Equatable {
     case openFailed(message: String)
     case prepareFailed(message: String)
     case stepFailed(message: String)
