@@ -1,30 +1,33 @@
 import Foundation
 
 extension TydomConnection {
-    func decodedMessages(
-        using dependencies: TydomMessagePipelineDependencies
-    ) -> some AsyncSequence<TydomMessage, Never> {
-        messages()
-            .map(dependencies.dataToRawMessage)
-            .map(dependencies.rawMessageToEnvelope)
-            .map(dependencies.hydrateFromCache)
-            .map { hydrated in
-                Task { await dependencies.enqueueEffects(hydrated.effects) }
-                return hydrated.message
-            }
+    public func decodedMessages() -> AsyncStream<TydomMessage> {
+        decodedMessages(logger: { _ in })
     }
-    
-    public func decodedMessages() -> some AsyncSequence<TydomMessage, Never> {
-        let dependencies = TydomMessagePipelineDependencies.live(connection: self)
-        
-        return messages()
-            .map(dependencies.dataToRawMessage)
-            .map(dependencies.rawMessageToEnvelope)
-            .map(dependencies.hydrateFromCache)
-            .map { hydrated in
-                Task { await dependencies.enqueueEffects(hydrated.effects) }
-                return hydrated.message
+
+    public func decodedMessages(
+        logger: @escaping @Sendable (String) -> Void
+    ) -> AsyncStream<TydomMessage> {
+        let dependencies = TydomMessagePipelineDependencies.live(connection: self, log: logger)
+        return AsyncStream { continuation in
+            let task = Task { [weak self] in
+                guard let self else {
+                    continuation.finish()
+                    return
+                }
+                for await data in await self.messages() {
+                    let raw = dependencies.dataToRawMessage(data)
+                    let decoded = dependencies.rawMessageToEnvelope(raw)
+                    let hydrated = await dependencies.hydrateFromCache(decoded)
+                    Task { await dependencies.enqueueEffects(hydrated.effects) }
+                    continuation.yield(hydrated.message)
+                }
+                continuation.finish()
             }
+            continuation.onTermination = { _ in
+                task.cancel()
+            }
+        }
     }
 }
 
@@ -70,6 +73,7 @@ extension TydomMessagePipelineDependencies {
 
     static func live(
         connection: TydomConnection,
+        log: @escaping @Sendable (String) -> Void = { _ in }
     ) -> TydomMessagePipelineDependencies {
         let hydrator: TydomMessageHydrator = .live()
         
@@ -92,7 +96,8 @@ extension TydomMessagePipelineDependencies {
             },
             pollScheduler: pollScheduler,
             pongStore: TydomPongStore(),
-            cdataReplyStore: TydomCDataReplyStore()
+            cdataReplyStore: TydomCDataReplyStore(),
+            log: log
         )
         
         return live(hydrator: hydrator, effectExecutor: effectExecutor)

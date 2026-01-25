@@ -24,22 +24,32 @@ import Foundation
 public actor TydomConnection {
     let configuration: Configuration
     private let dependencies: Dependencies
+    private let log: @Sendable (String) -> Void
 
     private var session: URLSession?
     private var socketTask: URLSessionWebSocketTask?
     private var receiveTask: Task<Void, Never>?
+    private var keepAliveTask: Task<Void, Never>?
 
     private let messageStream: AsyncStream<Data>
     private var messageContinuation: AsyncStream<Data>.Continuation?
     private let activityStore = TydomAppActivityStore()
 
-    public init(configuration: Configuration) {
-        self.init(configuration: configuration, dependencies: .live())
+    public init(
+        configuration: Configuration,
+        log: @escaping @Sendable (String) -> Void = { _ in }
+    ) {
+        self.init(configuration: configuration, dependencies: .live(), log: log)
     }
 
-    init(configuration: Configuration, dependencies: Dependencies = .live()) {
+    init(
+        configuration: Configuration,
+        dependencies: Dependencies = .live(),
+        log: @escaping @Sendable (String) -> Void = { _ in }
+    ) {
         self.configuration = configuration
         self.dependencies = dependencies
+        self.log = log
 
         let streamResult = AsyncStream<Data>.makeStream()
         self.messageStream = streamResult.stream
@@ -48,6 +58,7 @@ public actor TydomConnection {
 
     deinit {
         receiveTask?.cancel()
+        keepAliveTask?.cancel()
         socketTask?.cancel(with: .goingAway, reason: nil)
         if let session {
             dependencies.invalidateSession(session)
@@ -69,34 +80,45 @@ public actor TydomConnection {
     public func connect() async throws {
         guard socketTask == nil else { return }
 
-        let session = dependencies.makeSession(configuration.allowInsecureTLS, configuration.timeout)
-        self.session = session
+        log("Connecting to \(configuration.webSocketURL.absoluteString)")
 
-        let password = try await resolvePassword(using: session)
-        let challenge = try await fetchDigestChallenge(using: session, randomBytes: dependencies.randomBytes)
-        let authorization = try buildDigestAuthorization(
-            challenge: challenge,
-            username: configuration.mac,
-            password: password,
-            method: "GET",
-            uri: configuration.webSocketURL.requestTarget,
-            randomBytes: dependencies.randomBytes
+        let passwordSession = dependencies.makeSession(
+            configuration.allowInsecureTLS,
+            configuration.timeout,
+            nil
         )
+        let password = try await resolvePassword(using: passwordSession)
+        dependencies.invalidateSession(passwordSession)
+
+        let credential = URLCredential(
+            user: configuration.digestUsername,
+            password: password,
+            persistence: .forSession
+        )
+        let session = dependencies.makeSession(
+            configuration.allowInsecureTLS,
+            configuration.timeout,
+            credential
+        )
+        self.session = session
 
         var request = URLRequest(url: configuration.webSocketURL)
         request.timeoutInterval = configuration.timeout
-        request.setValue(authorization, forHTTPHeaderField: "Authorization")
 
         let task = session.webSocketTask(with: request)
         task.resume()
 
         self.socketTask = task
+        log("WebSocket task resumed.")
         startReceiving(from: task)
+        startKeepAlive()
     }
 
     public func disconnect() {
         receiveTask?.cancel()
         receiveTask = nil
+        keepAliveTask?.cancel()
+        keepAliveTask = nil
 
         socketTask?.cancel(with: .goingAway, reason: nil)
         socketTask = nil
@@ -105,16 +127,23 @@ public actor TydomConnection {
             dependencies.invalidateSession(session)
         }
         session = nil
+        log("Disconnected.")
     }
 
     public func send(_ data: Data) async throws {
-        guard let task = socketTask else { throw ConnectionError.notConnected }
+        guard let task = socketTask else {
+            log("Send failed: not connected.")
+            throw ConnectionError.notConnected
+        }
         let payload = applyOutgoingPrefix(to: data)
         try await task.send(.data(payload))
     }
 
     public func send(text: String) async throws {
-        guard let task = socketTask else { throw ConnectionError.notConnected }
+        guard let task = socketTask else {
+            log("Send failed: not connected.")
+            throw ConnectionError.notConnected
+        }
         let payload = applyOutgoingPrefix(to: Data(text.utf8))
         try await task.send(.data(payload))
     }
@@ -136,9 +165,34 @@ public actor TydomConnection {
                     }
                 } catch {
                     if Task.isCancelled { break }
+                    let closeCode = task.closeCode.rawValue
+                    let reason = task.closeReason.flatMap { String(data: $0, encoding: .utf8) } ?? "n/a"
+                    log("WebSocket receive failed: \(error) (closeCode=\(closeCode), reason=\(reason))")
                     await self.handleReceiveFailure(task: task)
                     break
                 }
+            }
+        }
+    }
+
+    private func startKeepAlive() {
+        keepAliveTask?.cancel()
+        let config = configuration.keepAlive
+        guard config.isEnabled else { return }
+        keepAliveTask = Task { [weak self] in
+            guard let self else { return }
+            let sleepNanoseconds = UInt64(config.intervalSeconds) * 1_000_000_000
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(nanoseconds: sleepNanoseconds)
+                } catch {
+                    break
+                }
+                if config.onlyWhenActive {
+                    let isActive = await self.isAppActive()
+                    guard isActive else { continue }
+                }
+                _ = try? await self.send(TydomCommand.ping())
             }
         }
     }
@@ -168,10 +222,36 @@ public actor TydomConnection {
         using session: URLSession,
         randomBytes: @Sendable (Int) -> [UInt8]
     ) async throws -> DigestChallenge {
+        do {
+            return try await fetchDigestChallenge(
+                using: session,
+                randomBytes: randomBytes,
+                includeUpgradeHeaders: true
+            )
+        } catch {
+            if shouldRetryDigestChallenge(error: error) {
+                return try await fetchDigestChallenge(
+                    using: session,
+                    randomBytes: randomBytes,
+                    includeUpgradeHeaders: false
+                )
+            }
+            throw error
+        }
+    }
+
+    private func fetchDigestChallenge(
+        using session: URLSession,
+        randomBytes: @Sendable (Int) -> [UInt8],
+        includeUpgradeHeaders: Bool
+    ) async throws -> DigestChallenge {
         var request = URLRequest(url: configuration.httpsURL)
         request.httpMethod = "GET"
         request.timeoutInterval = configuration.timeout
-        let handshakeHeaders = buildHandshakeHeaders(randomBytes: randomBytes)
+        let handshakeHeaders = buildHandshakeHeaders(
+            randomBytes: randomBytes,
+            includeUpgradeHeaders: includeUpgradeHeaders
+        )
         for (key, value) in handshakeHeaders {
             request.setValue(value, forHTTPHeaderField: key)
         }
@@ -186,16 +266,28 @@ public actor TydomConnection {
         return try DigestChallenge.parse(from: rawHeader)
     }
 
-    private func buildHandshakeHeaders(randomBytes: @Sendable (Int) -> [UInt8]) -> [String: String] {
-        let key = Data(randomBytes(16)).base64EncodedString()
-        return [
-            "Connection": "Upgrade",
-            "Upgrade": "websocket",
+    private func buildHandshakeHeaders(
+        randomBytes: @Sendable (Int) -> [UInt8],
+        includeUpgradeHeaders: Bool
+    ) -> [String: String] {
+        var headers: [String: String] = [
             "Host": "\(configuration.host):443",
-            "Accept": "*/*",
-            "Sec-WebSocket-Key": key,
-            "Sec-WebSocket-Version": "13"
+            "Accept": "*/*"
         ]
+        guard includeUpgradeHeaders else { return headers }
+        let key = Data(randomBytes(16)).base64EncodedString()
+        headers["Connection"] = "Upgrade"
+        headers["Upgrade"] = "websocket"
+        headers["Sec-WebSocket-Key"] = key
+        headers["Sec-WebSocket-Version"] = "13"
+        return headers
+    }
+
+    private func shouldRetryDigestChallenge(error: Error) -> Bool {
+        if let urlError = error as? URLError {
+            return urlError.code == .networkConnectionLost
+        }
+        return false
     }
 
     private func applyOutgoingPrefix(to data: Data) -> Data {

@@ -16,6 +16,20 @@ extension TydomConnection {
             }
         }
 
+        public struct KeepAlive: Sendable {
+            public let intervalSeconds: Int
+            public let onlyWhenActive: Bool
+
+            public init(intervalSeconds: Int = 30, onlyWhenActive: Bool = true) {
+                self.intervalSeconds = intervalSeconds
+                self.onlyWhenActive = onlyWhenActive
+            }
+
+            public var isEnabled: Bool {
+                intervalSeconds > 0
+            }
+        }
+
         public enum Mode: Sendable {
             case local(host: String)
             case remote(host: String = "mediation.tydom.com")
@@ -28,6 +42,7 @@ extension TydomConnection {
         public let allowInsecureTLS: Bool
         public let timeout: TimeInterval
         public let polling: Polling
+        public let keepAlive: KeepAlive
 
         public init(
             mode: Mode,
@@ -36,7 +51,8 @@ extension TydomConnection {
             cloudCredentials: CloudCredentials? = nil,
             allowInsecureTLS: Bool? = nil,
             timeout: TimeInterval = 10.0,
-            polling: Polling = Polling()
+            polling: Polling = Polling(),
+            keepAlive: KeepAlive = KeepAlive()
         ) {
             self.mode = mode
             self.mac = mac
@@ -45,6 +61,19 @@ extension TydomConnection {
             self.allowInsecureTLS = allowInsecureTLS ?? true
             self.timeout = timeout
             self.polling = polling
+            self.keepAlive = keepAlive
+        }
+
+        var normalizedMac: String {
+            mac.filter { $0.isHexDigit }.uppercased()
+        }
+
+        var digestUsername: String {
+            return isRemote ? normalizedMac : mac
+        }
+
+        var queryMac: String {
+            return isRemote ? normalizedMac : mac
         }
 
         var host: String {
@@ -72,7 +101,7 @@ extension TydomConnection {
             components.port = 443
             components.path = "/mediation/client"
             components.queryItems = [
-                URLQueryItem(name: "mac", value: mac),
+                URLQueryItem(name: "mac", value: queryMac),
                 URLQueryItem(name: "appli", value: "1")
             ]
             return components.url!
@@ -85,7 +114,7 @@ extension TydomConnection {
             components.port = 443
             components.path = "/mediation/client"
             components.queryItems = [
-                URLQueryItem(name: "mac", value: mac),
+                URLQueryItem(name: "mac", value: queryMac),
                 URLQueryItem(name: "appli", value: "1")
             ]
             return components.url!
