@@ -17,6 +17,10 @@ let package = Package(
             name: "DeltaDoreClient",
             targets: ["DeltaDoreClient"]
         ),
+        .executable(
+            name: "DeltaDoreCLI",
+            targets: ["DeltaDoreCLI"]
+        ),
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
@@ -29,6 +33,13 @@ let package = Package(
             ],
             linkerSettings: [
                 .linkedLibrary("sqlite3")
+            ]
+        ),
+        .executableTarget(
+            name: "DeltaDoreCLI",
+            dependencies: ["DeltaDoreClient"],
+            swiftSettings: [
+                .enableExperimentalFeature("StrictConcurrency=complete")
             ]
         ),
         .testTarget(

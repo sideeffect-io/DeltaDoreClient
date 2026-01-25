@@ -7,19 +7,22 @@ actor TydomMessageEffectExecutor {
         let pollOnceScheduled: @Sendable () async -> Void
         let onPong: @Sendable () async -> Void
         let onCDataReplyChunk: @Sendable (TydomCDataReplyChunk) async -> Void
+        let log: @Sendable (String) -> Void
 
         init(
             sendCommand: @escaping @Sendable (TydomCommand) async throws -> Void,
             pollScheduler: @escaping @Sendable ([String], Int) async -> Void,
             pollOnceScheduled: @escaping @Sendable () async -> Void = {},
             onPong: @escaping @Sendable () async -> Void = {},
-            onCDataReplyChunk: @escaping @Sendable (TydomCDataReplyChunk) async -> Void = { _ in }
+            onCDataReplyChunk: @escaping @Sendable (TydomCDataReplyChunk) async -> Void = { _ in },
+            log: @escaping @Sendable (String) -> Void = { _ in }
         ) {
             self.sendCommand = sendCommand
             self.pollScheduler = pollScheduler
             self.pollOnceScheduled = pollOnceScheduled
             self.onPong = onPong
             self.onCDataReplyChunk = onCDataReplyChunk
+            self.log = log
         }
     }
 
@@ -75,7 +78,8 @@ extension TydomMessageEffectExecutor {
         isActive: @escaping @Sendable () async -> Bool = { true },
         pollScheduler: TydomMessagePollScheduler? = nil,
         pongStore: TydomPongStore = TydomPongStore(),
-        cdataReplyStore: TydomCDataReplyStore = TydomCDataReplyStore()
+        cdataReplyStore: TydomCDataReplyStore = TydomCDataReplyStore(),
+        log: @escaping @Sendable (String) -> Void = { _ in }
     ) -> TydomMessageEffectExecutor {
         let activeCheck: @Sendable () async -> Bool
         if pollingConfiguration.onlyWhenActive {
@@ -91,10 +95,19 @@ extension TydomMessageEffectExecutor {
             sendCommand: sendCommand,
             pollScheduler: { urls, _ in
                 let effectiveInterval = pollingConfiguration.intervalSeconds
-                guard pollingConfiguration.isEnabled else { return }
+                guard pollingConfiguration.isEnabled else {
+                    log("Polling disabled (intervalSeconds=\(effectiveInterval)).")
+                    return
+                }
+                if urls.isEmpty {
+                    log("Polling schedule skipped (no urls).")
+                    return
+                }
+                log("Polling scheduled for \(urls.count) url(s) every \(effectiveInterval)s.")
                 await scheduler.schedule(urls: urls, intervalSeconds: effectiveInterval)
             },
             pollOnceScheduled: {
+                log("Polling once for scheduled urls.")
                 await scheduler.pollOnceScheduled()
             },
             onPong: {
@@ -102,7 +115,8 @@ extension TydomMessageEffectExecutor {
             },
             onCDataReplyChunk: { chunk in
                 await cdataReplyStore.append(chunk)
-            }
+            },
+            log: log
         )
         return TydomMessageEffectExecutor(dependencies: dependencies)
     }

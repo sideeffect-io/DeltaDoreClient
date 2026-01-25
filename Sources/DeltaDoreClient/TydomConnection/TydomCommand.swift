@@ -15,14 +15,14 @@ extension TydomCommand {
         case post = "POST"
     }
 
-    enum PutDataValue: Sendable, Equatable {
+    public enum PutDataValue: Sendable, Equatable {
         case string(String)
         case bool(Bool)
         case int(Int)
         case null
     }
 
-    enum DeviceDataValue: Sendable, Equatable {
+    public enum DeviceDataValue: Sendable, Equatable {
         case string(String)
         case bool(Bool)
         case int(Int)
@@ -65,87 +65,87 @@ extension TydomCommand {
         return TydomCommand(request: request)
     }
 
-    static func info(transactionId: String = defaultTransactionId()) -> TydomCommand {
+    public static func info(transactionId: String = defaultTransactionId()) -> TydomCommand {
         request(method: .get, path: "/info", transactionId: transactionId)
     }
 
-    static func localClaim(transactionId: String = defaultTransactionId()) -> TydomCommand {
+    public static func localClaim(transactionId: String = defaultTransactionId()) -> TydomCommand {
         request(method: .get, path: "/configs/gateway/local_claim", transactionId: transactionId)
     }
 
-    static func geoloc(transactionId: String = defaultTransactionId()) -> TydomCommand {
+    public static func geoloc(transactionId: String = defaultTransactionId()) -> TydomCommand {
         request(method: .get, path: "/configs/gateway/geoloc", transactionId: transactionId)
     }
 
-    static func apiMode(transactionId: String = defaultTransactionId()) -> TydomCommand {
+    public static func apiMode(transactionId: String = defaultTransactionId()) -> TydomCommand {
         request(method: .put, path: "/configs/gateway/api_mode", transactionId: transactionId)
     }
 
-    static func refreshAll(transactionId: String = defaultTransactionId()) -> TydomCommand {
+    public static func refreshAll(transactionId: String = defaultTransactionId()) -> TydomCommand {
         request(method: .post, path: "/refresh/all", transactionId: transactionId)
     }
 
-    static func ping(transactionId: String = defaultTransactionId()) -> TydomCommand {
+    public static func ping(transactionId: String = defaultTransactionId()) -> TydomCommand {
         request(method: .get, path: "/ping", transactionId: transactionId)
     }
 
-    static func devicesMeta(transactionId: String = defaultTransactionId()) -> TydomCommand {
+    public static func devicesMeta(transactionId: String = defaultTransactionId()) -> TydomCommand {
         request(method: .get, path: "/devices/meta", transactionId: transactionId)
     }
 
-    static func devicesData(transactionId: String = defaultTransactionId()) -> TydomCommand {
+    public static func devicesData(transactionId: String = defaultTransactionId()) -> TydomCommand {
         request(method: .get, path: "/devices/data", transactionId: transactionId)
     }
 
-    static func configsFile(transactionId: String = defaultTransactionId()) -> TydomCommand {
+    public static func configsFile(transactionId: String = defaultTransactionId()) -> TydomCommand {
         request(method: .get, path: "/configs/file", transactionId: transactionId)
     }
 
-    static func devicesCmeta(transactionId: String = defaultTransactionId()) -> TydomCommand {
+    public static func devicesCmeta(transactionId: String = defaultTransactionId()) -> TydomCommand {
         request(method: .get, path: "/devices/cmeta", transactionId: transactionId)
     }
 
-    static func areasMeta(transactionId: String = defaultTransactionId()) -> TydomCommand {
+    public static func areasMeta(transactionId: String = defaultTransactionId()) -> TydomCommand {
         request(method: .get, path: "/areas/meta", transactionId: transactionId)
     }
 
-    static func areasCmeta(transactionId: String = defaultTransactionId()) -> TydomCommand {
+    public static func areasCmeta(transactionId: String = defaultTransactionId()) -> TydomCommand {
         request(method: .get, path: "/areas/cmeta", transactionId: transactionId)
     }
 
-    static func areasData(transactionId: String = defaultTransactionId()) -> TydomCommand {
+    public static func areasData(transactionId: String = defaultTransactionId()) -> TydomCommand {
         request(method: .get, path: "/areas/data", transactionId: transactionId)
     }
 
-    static func momentsFile(transactionId: String = defaultTransactionId()) -> TydomCommand {
+    public static func momentsFile(transactionId: String = defaultTransactionId()) -> TydomCommand {
         request(method: .get, path: "/moments/file", transactionId: transactionId)
     }
 
-    static func scenariosFile(transactionId: String = defaultTransactionId()) -> TydomCommand {
+    public static func scenariosFile(transactionId: String = defaultTransactionId()) -> TydomCommand {
         request(method: .get, path: "/scenarios/file", transactionId: transactionId)
     }
 
-    static func activateScenario(_ scenarioId: String, transactionId: String = defaultTransactionId()) -> TydomCommand {
+    public static func activateScenario(_ scenarioId: String, transactionId: String = defaultTransactionId()) -> TydomCommand {
         request(method: .put, path: "/scenarios/\(scenarioId)", transactionId: transactionId)
     }
 
-    static func groupsFile(transactionId: String = defaultTransactionId()) -> TydomCommand {
+    public static func groupsFile(transactionId: String = defaultTransactionId()) -> TydomCommand {
         request(method: .get, path: "/groups/file", transactionId: transactionId)
     }
 
-    static func deviceData(deviceId: String, transactionId: String = defaultTransactionId()) -> TydomCommand {
+    public static func deviceData(deviceId: String, transactionId: String = defaultTransactionId()) -> TydomCommand {
         request(method: .get, path: "/devices/\(deviceId)/endpoints/\(deviceId)/data", transactionId: transactionId)
     }
 
-    static func pollDeviceData(url: String, transactionId: String = defaultTransactionId()) -> TydomCommand {
+    public static func pollDeviceData(url: String, transactionId: String = defaultTransactionId()) -> TydomCommand {
         request(method: .get, path: url, transactionId: transactionId)
     }
 
-    static func updateFirmware(transactionId: String = defaultTransactionId()) -> TydomCommand {
+    public static func updateFirmware(transactionId: String = defaultTransactionId()) -> TydomCommand {
         request(method: .put, path: "/configs/gateway/update", transactionId: transactionId)
     }
 
-    static func putData(
+    public static func putData(
         path: String,
         name: String,
         value: PutDataValue,
@@ -155,7 +155,7 @@ extension TydomCommand {
         return request(method: .put, path: path, body: body, transactionId: transactionId)
     }
 
-    static func putDevicesData(
+    public static func putDevicesData(
         deviceId: String,
         endpointId: String,
         name: String,
@@ -171,7 +171,7 @@ extension TydomCommand {
         )
     }
 
-    static func alarmCData(
+    public static func alarmCData(
         deviceId: String,
         endpointId: String,
         alarmPin: String?,
@@ -210,7 +210,7 @@ extension TydomCommand {
         ]
     }
 
-    static func ackEventsCData(
+    public static func ackEventsCData(
         deviceId: String,
         endpointId: String,
         alarmPin: String?,
@@ -225,7 +225,7 @@ extension TydomCommand {
         )
     }
 
-    static func historicCData(
+    public static func historicCData(
         deviceId: String,
         endpointId: String,
         eventType: String? = nil,
@@ -238,7 +238,7 @@ extension TydomCommand {
         return request(method: .get, path: path, transactionId: transactionId)
     }
 
-    static func defaultTransactionId(now: @Sendable () -> Date = Date.init) -> String {
+    public static func defaultTransactionId(now: @Sendable () -> Date = Date.init) -> String {
         let milliseconds = Int(now().timeIntervalSince1970 * 1000)
         return String(milliseconds)
     }
