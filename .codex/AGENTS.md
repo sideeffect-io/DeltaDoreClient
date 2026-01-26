@@ -1,9 +1,9 @@
 # Agents Overview — Swift Home Automation Package
 
-This repository implements a **Swift Package** for locally controlling a DeltaDore box using a functional architecture and strong testability guarantees.  
+This repository implements a **Swift Package** for controlling a DeltaDore box using a functional programming architecture and strong testability guarantees.  
 Agents working with this repo (AI assistants, automation tools, or new team members) should understand:
 
-- Functional design principles (immutability, pure functions, side effects, composition)
+- Functional design principles (immutability, pure functions, higher order functions, side effects, composition)
 - How we structure side effects via dependency injection
 - SOLID principles applied in a Swift + functional programming context
 - Testability via injecting functions and capabilities
@@ -49,8 +49,9 @@ These emphasize modularity without unnecessary abstractions.
 This aligns with modern functional design patterns that emphasize clarity, testability, and correctness.
 
 - Use Enums as a namespace for related free functions.
-- A function should be max 30 lines of code, split it otherwise.
+- A function should be max 30 lines of code, split it otherwise (use composition).
 - A file should be max 300 lines of code, split it otherwise (use composition and extensions).
+- When working in a swift package, types visibility is important, by default types should not be visible from the outside (internal), a type should be public only if it is part of the public API used by the end client.
 
 ---
 
@@ -59,11 +60,11 @@ This aligns with modern functional design patterns that emphasize clarity, testa
 We favor **function injection instead of object mocking**:
 
 - Capability structs of closures (e.g., network client, clock, logger)
+- Use of higher order function
 - Inject only what a unit needs (small slices)
 - Pure core logic that can be tested with no environment dependencies
 - We focus on unit tests (not integration tests).
-- Always use the Swift Testing framework.
-- Use the Given, When, Then pattern
+- Always use the Swift Testing framework and use the Given, When, Then pattern
 
 ---
 
@@ -86,15 +87,13 @@ This yields a clean, linear history and makes `git bisect` and blame more effect
 ## How to run and test
 
 In the context of a Swift package, we use the Swift CLI with commands like `swift build` or `swift test`
-If this does not apply, we can use the XCodeBuildMCP server
-
-Don't wait for approval when you need to execute commands to build and test the projet.
+If this is a full Xcode project, we can use the XCodeBuildMCP server.
 
 --
 
 ## Swift documentation
 
-When needed we can use the Cupertino MCP to access the officiel Swift documentation and Apple coding guides.
+When needed use the Cupertino MCP server to access the officiel Swift documentation and Apple coding guides.
 
 --
 
@@ -105,5 +104,4 @@ Add new documentation references here going forward.
 - `docs/sqlite-persistence.md` — SQLite persistence overview, usage, and extension notes
 - `docs/tydom-connection.md` — TydomConnection execution plan, behavior, and usage
 - `docs/tydom-commands.md` — TydomCommand mechanism, legacy factory list, and usage
-- `docs/tydom-decoding.md` — Message decoding pipeline, cache dependencies, and usage
 - `docs/tydom-decoding.md` — Message decoding pipeline, cache dependencies, and usage
