@@ -23,9 +23,7 @@ enum TydomCloudPasswordProvider {
         mac: String,
         session: URLSession
     ) async throws -> String {
-        let tokenEndpoint = try await fetchTokenEndpoint(session: session)
         let accessToken = try await fetchAccessToken(
-            tokenEndpoint: tokenEndpoint,
             email: email,
             password: password,
             session: session
@@ -33,6 +31,20 @@ enum TydomCloudPasswordProvider {
         return try await fetchGatewayPasswordWithFallback(
             accessToken: accessToken,
             mac: mac,
+            session: session
+        )
+    }
+
+    static func fetchAccessToken(
+        email: String,
+        password: String,
+        session: URLSession
+    ) async throws -> String {
+        let tokenEndpoint = try await fetchTokenEndpoint(session: session)
+        return try await fetchAccessToken(
+            tokenEndpoint: tokenEndpoint,
+            email: email,
+            password: password,
             session: session
         )
     }
@@ -115,10 +127,10 @@ enum TydomCloudPasswordProvider {
             throw ProviderError.invalidResponse
         }
         let sitesResponse = try JSONDecoder().decode(SitesResponse.self, from: data)
-        let expectedMac = normalizedMac(mac)
+        let expectedMac = TydomMac.normalize(mac)
         guard let site = sitesResponse.sites.first(where: {
             guard let gatewayMac = $0.gateway?.mac else { return false }
-            return normalizedMac(gatewayMac) == expectedMac
+            return TydomMac.normalize(gatewayMac) == expectedMac
         }),
               let password = site.gateway?.password else {
             throw ProviderError.gatewayNotFound
@@ -133,34 +145,18 @@ enum TydomCloudPasswordProvider {
             candidates.append(trimmed)
         }
 
-        let normalized = normalizedMac(trimmed)
+        let normalized = TydomMac.normalize(trimmed)
         if normalized.isEmpty == false, normalized != trimmed {
             candidates.append(normalized)
         }
 
-        if let colonized = colonizedMac(from: normalized), colonized != trimmed {
+        if let colonized = TydomMac.colonize(normalized), colonized != trimmed {
             candidates.append(colonized)
         }
 
         return Array(NSOrderedSet(array: candidates)) as? [String] ?? candidates
     }
 
-    private static func normalizedMac(_ mac: String) -> String {
-        let hexOnly = mac.filter { $0.isHexDigit }
-        return hexOnly.uppercased()
-    }
-
-    private static func colonizedMac(from normalized: String) -> String? {
-        guard normalized.count == 12 else { return nil }
-        var parts: [String] = []
-        var index = normalized.startIndex
-        for _ in 0..<6 {
-            let nextIndex = normalized.index(index, offsetBy: 2)
-            parts.append(String(normalized[index..<nextIndex]))
-            index = nextIndex
-        }
-        return parts.joined(separator: ":")
-    }
 }
 
 private struct OpenIDConfig: Decodable {
