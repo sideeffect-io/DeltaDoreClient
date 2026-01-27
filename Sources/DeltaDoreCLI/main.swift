@@ -27,6 +27,15 @@ struct DeltaDoreCLI {
                 return
             }
             await runCLI(options: CLIOptions(configuration: configuration), stdout: stdout, stderr: stderr)
+        case .runResolved(let options):
+            guard let configuration = await resolveExplicitConfiguration(
+                options: options,
+                stdout: stdout,
+                stderr: stderr
+            ) else {
+                return
+            }
+            await runCLI(options: CLIOptions(configuration: configuration), stdout: stdout, stderr: stderr)
         }
     }
 }
@@ -34,6 +43,7 @@ struct DeltaDoreCLI {
 private enum StartupAction: Sendable {
     case run(CLIOptions)
     case runAuto(AutoOptions)
+    case runResolved(ResolveOptions)
     case help(String)
     case failure(String)
 }
@@ -54,6 +64,20 @@ private struct AutoOptions: Sendable {
     let remoteHost: String?
     let listSites: Bool
     let forceRemote: Bool
+}
+
+private struct ResolveOptions: Sendable {
+    let mode: String
+    let host: String?
+    let mac: String?
+    let password: String?
+    let cloudCredentials: TydomConnection.CloudCredentials?
+    let siteIndex: Int?
+    let listSites: Bool
+    let timeout: TimeInterval
+    let pollInterval: Int
+    let pollOnlyActive: Bool
+    let allowInsecureTLS: Bool?
 }
 
 private enum CLICommand: Sendable {
@@ -213,91 +237,15 @@ private func resolveAutoConfiguration(
         }
     }
 
-    var gatewayMac = options.mac
-    if gatewayMac == nil {
-        guard let cloudCredentials = options.cloudCredentials else {
-            await stderr.writeLine("Auto mode requires --cloud-email and --cloud-password to fetch sites.")
-            return nil
-        }
-        let session = URLSession(configuration: .default)
-        do {
-            let sites = try await TydomCloudSitesProvider.fetchSites(
-                email: cloudCredentials.email,
-                password: cloudCredentials.password,
-                session: session
-            )
-            session.invalidateAndCancel()
-            guard sites.isEmpty == false else {
-                await stderr.writeLine("No sites returned from cloud.")
-                return nil
-            }
-            if options.listSites {
-                await printSites(sites, stdout: stdout)
-                return nil
-            }
-            let index: Int
-            if let providedIndex = options.siteIndex {
-                guard sites.indices.contains(providedIndex) else {
-                    await stderr.writeLine("Invalid --site-index \(providedIndex). Available range: 0...\(max(0, sites.count - 1)).")
-                    return nil
-                }
-                index = providedIndex
-            } else {
-                guard let selection = await chooseSiteIndex(sites, stdout: stdout, stderr: stderr) else {
-                    return nil
-                }
-                index = selection
-            }
-            let site = sites[index]
-            guard let gateway = site.gateways.first else {
-                await stderr.writeLine("Selected site has no gateways.")
-                return nil
-            }
-            gatewayMac = gateway.mac
-            await stdout.writeLine("Selected site: \(site.name) (gateway: \(gateway.mac))")
-        } catch {
-            session.invalidateAndCancel()
-            await stderr.writeLine("Failed to fetch sites: \(error)")
-            return nil
-        }
-    }
-
-    guard let selectedMac = gatewayMac else {
-        await stderr.writeLine("Missing gateway MAC.")
-        return nil
-    }
-
-    let gatewayId = TydomMac.normalize(selectedMac)
-    var credentials: TydomGatewayCredentials?
-    do {
-        credentials = try await store.load(gatewayId)
-    } catch {
-        await stderr.writeLine("Failed to load credentials: \(error)")
-    }
-
-    if credentials == nil {
-        guard let cloudCredentials = options.cloudCredentials else {
-            await stderr.writeLine("No stored credentials. Provide --cloud-email and --cloud-password to fetch them.")
-            return nil
-        }
-        let fetcher = TydomGatewayCredentialFetcher(
-            dependencies: .live(store: store)
-        )
-        do {
-            credentials = try await fetcher.fetchAndPersist(
-                gatewayId: gatewayId,
-                gatewayMac: selectedMac,
-                cloudCredentials: cloudCredentials
-            )
-            await stdout.writeLine("Fetched and stored gateway credentials.")
-        } catch {
-            await stderr.writeLine("Failed to fetch gateway credentials: \(error)")
-            return nil
-        }
-    }
-
-    guard let stored = credentials else {
-        await stderr.writeLine("Missing gateway credentials.")
+    guard let stored = await resolveGatewayCredentials(
+        mac: options.mac,
+        cloudCredentials: options.cloudCredentials,
+        siteIndex: options.siteIndex,
+        listSites: options.listSites,
+        store: store,
+        stdout: stdout,
+        stderr: stderr
+    ) else {
         return nil
     }
 
@@ -333,6 +281,7 @@ private func resolveAutoConfiguration(
                 updatedAt: Date()
             )
             do {
+                let gatewayId = TydomMac.normalize(stored.mac)
                 try await store.save(gatewayId, updated)
             } catch {
                 await stderr.writeLine("Failed to persist cached IP: \(error)")
@@ -343,6 +292,158 @@ private func resolveAutoConfiguration(
 
     await stderr.writeLine("Local connection failed, falling back to remote.")
     return remoteConfig(mac: stored.mac, password: stored.password, polling: makePolling())
+}
+
+private func resolveExplicitConfiguration(
+    options: ResolveOptions,
+    stdout: ConsoleWriter,
+    stderr: ConsoleWriter
+) async -> TydomConnection.Configuration? {
+    let store = TydomGatewayCredentialStore.liveKeychain(service: "com.deltadore.tydom.cli")
+    guard let stored = await resolveGatewayCredentials(
+        mac: options.mac,
+        cloudCredentials: options.cloudCredentials,
+        siteIndex: options.siteIndex,
+        listSites: options.listSites,
+        store: store,
+        stdout: stdout,
+        stderr: stderr
+    ) else {
+        return nil
+    }
+
+    let polling = TydomConnection.Configuration.Polling(
+        intervalSeconds: options.pollInterval,
+        onlyWhenActive: options.pollOnlyActive
+    )
+
+    switch options.mode {
+    case "local":
+        guard let host = options.host else {
+            await stderr.writeLine("Missing required --host for local mode.")
+            return nil
+        }
+        return TydomConnection.Configuration(
+            mode: .local(host: host),
+            mac: stored.mac,
+            password: stored.password,
+            cloudCredentials: nil,
+            allowInsecureTLS: options.allowInsecureTLS,
+            timeout: options.timeout,
+            polling: polling
+        )
+    case "remote":
+        let host = options.host ?? "mediation.tydom.com"
+        return TydomConnection.Configuration(
+            mode: .remote(host: host),
+            mac: stored.mac,
+            password: stored.password,
+            cloudCredentials: nil,
+            allowInsecureTLS: options.allowInsecureTLS,
+            timeout: options.timeout,
+            polling: polling
+        )
+    default:
+        await stderr.writeLine("Invalid --mode value. Use local, remote, or auto.")
+        return nil
+    }
+}
+
+private func resolveGatewayCredentials(
+    mac: String?,
+    cloudCredentials: TydomConnection.CloudCredentials?,
+    siteIndex: Int?,
+    listSites: Bool,
+    store: TydomGatewayCredentialStore,
+    stdout: ConsoleWriter,
+    stderr: ConsoleWriter
+) async -> TydomGatewayCredentials? {
+    var selectedMac = mac
+    if selectedMac == nil {
+        guard let cloudCredentials else {
+            await stderr.writeLine("Missing --mac. Provide --cloud-email and --cloud-password to fetch sites.")
+            return nil
+        }
+        let session = URLSession(configuration: .default)
+        do {
+            let sites = try await TydomCloudSitesProvider.fetchSites(
+                email: cloudCredentials.email,
+                password: cloudCredentials.password,
+                session: session
+            )
+            session.invalidateAndCancel()
+            guard sites.isEmpty == false else {
+                await stderr.writeLine("No sites returned from cloud.")
+                return nil
+            }
+            if listSites {
+                await printSites(sites, stdout: stdout)
+                return nil
+            }
+            let index: Int
+            if let providedIndex = siteIndex {
+                guard sites.indices.contains(providedIndex) else {
+                    await stderr.writeLine("Invalid --site-index \(providedIndex). Available range: 0...\(max(0, sites.count - 1)).")
+                    return nil
+                }
+                index = providedIndex
+            } else {
+                guard let selection = await chooseSiteIndex(sites, stdout: stdout, stderr: stderr) else {
+                    return nil
+                }
+                index = selection
+            }
+            let site = sites[index]
+            guard let gateway = site.gateways.first else {
+                await stderr.writeLine("Selected site has no gateways.")
+                return nil
+            }
+            selectedMac = gateway.mac
+            await stdout.writeLine("Selected site: \(site.name) (gateway: \(gateway.mac))")
+        } catch {
+            session.invalidateAndCancel()
+            await stderr.writeLine("Failed to fetch sites: \(error)")
+            return nil
+        }
+    }
+
+    guard let selectedMac else {
+        await stderr.writeLine("Missing gateway MAC.")
+        return nil
+    }
+
+    let gatewayId = TydomMac.normalize(selectedMac)
+    var credentials: TydomGatewayCredentials?
+    do {
+        credentials = try await store.load(gatewayId)
+    } catch {
+        await stderr.writeLine("Failed to load credentials: \(error)")
+    }
+
+    if credentials == nil {
+        guard let cloudCredentials else {
+            await stderr.writeLine("No stored credentials. Provide --cloud-email and --cloud-password to fetch them.")
+            return nil
+        }
+        let fetcher = TydomGatewayCredentialFetcher(dependencies: .live(store: store))
+        do {
+            credentials = try await fetcher.fetchAndPersist(
+                gatewayId: gatewayId,
+                gatewayMac: selectedMac,
+                cloudCredentials: cloudCredentials
+            )
+            await stdout.writeLine("Fetched and stored gateway credentials.")
+        } catch {
+            await stderr.writeLine("Failed to fetch gateway credentials: \(error)")
+            return nil
+        }
+    }
+
+    guard let stored = credentials else {
+        await stderr.writeLine("Missing gateway credentials.")
+        return nil
+    }
+    return stored
 }
 
 private func chooseSiteIndex(
@@ -502,20 +603,46 @@ private func parseArguments(_ args: [String]) -> StartupAction {
     let selectedMode: TydomConnection.Configuration.Mode
     switch mode {
     case "local":
-        guard mac != nil else {
-            return .failure("Missing required --mac.")
-        }
         guard let host else { return .failure("Missing required --host for local mode.") }
         if password == nil && credentials == nil {
             return .failure("Provide --password or --cloud-email and --cloud-password.")
         }
+        if mac == nil {
+            let options = ResolveOptions(
+                mode: mode,
+                host: host,
+                mac: nil,
+                password: password,
+                cloudCredentials: credentials,
+                siteIndex: siteIndex,
+                listSites: listSites,
+                timeout: timeout,
+                pollInterval: pollInterval,
+                pollOnlyActive: pollOnlyActive,
+                allowInsecureTLS: allowInsecureTLS
+            )
+            return .runResolved(options)
+        }
         selectedMode = .local(host: host)
     case "remote":
-        guard mac != nil else {
-            return .failure("Missing required --mac.")
-        }
         if password == nil && credentials == nil {
             return .failure("Provide --password or --cloud-email and --cloud-password.")
+        }
+        if mac == nil {
+            let options = ResolveOptions(
+                mode: mode,
+                host: host,
+                mac: nil,
+                password: password,
+                cloudCredentials: credentials,
+                siteIndex: siteIndex,
+                listSites: listSites,
+                timeout: timeout,
+                pollInterval: pollInterval,
+                pollOnlyActive: pollOnlyActive,
+                allowInsecureTLS: allowInsecureTLS
+            )
+            return .runResolved(options)
         }
         selectedMode = .remote(host: host ?? "mediation.tydom.com")
     case "auto":
@@ -712,7 +839,7 @@ private func helpText() -> String {
     lines.append("Options:")
     lines.append("  --mode local|remote|auto      Connection mode (default: local)")
     lines.append("  --host <host>                 Gateway IP or host (required for local)")
-    lines.append("  --mac <mac>                   Gateway MAC address (required)")
+    lines.append("  --mac <mac>                   Gateway MAC address (optional with cloud login)")
     lines.append("  --password <password>         Local gateway password")
     lines.append("  --cloud-email <email>         Cloud account email")
     lines.append("  --cloud-password <password>   Cloud account password")
