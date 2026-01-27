@@ -62,6 +62,57 @@ public struct TydomCloudSitesProvider {
 
 private struct SiteAccessListResponse: Decodable {
     let sites: [SiteAccess]
+
+    init(from decoder: Decoder) throws {
+        var decodedSites: [SiteAccess]?
+        let keyed = try? decoder.container(keyedBy: DynamicCodingKeys.self)
+        if let keyed {
+            decodedSites = decodedSites ?? (try? keyed.decode([SiteAccess].self, forKey: DynamicCodingKeys("sites")))
+            decodedSites = decodedSites ?? (try? keyed.decode([SiteAccess].self, forKey: DynamicCodingKeys("siteAccessList")))
+            if decodedSites == nil,
+               let dataContainer = try? keyed.nestedContainer(
+                   keyedBy: DynamicCodingKeys.self,
+                   forKey: DynamicCodingKeys("data")
+               ) {
+                decodedSites = decodedSites ?? (try? dataContainer.decode([SiteAccess].self, forKey: DynamicCodingKeys("sites")))
+                decodedSites = decodedSites ?? (try? dataContainer.decode([SiteAccess].self, forKey: DynamicCodingKeys("siteAccessList")))
+            }
+        }
+
+        if decodedSites == nil {
+            let single = try decoder.singleValueContainer()
+            decodedSites = try? single.decode([SiteAccess].self)
+        }
+
+        if let decodedSites {
+            self.sites = decodedSites
+        } else {
+            let context = DecodingError.Context(
+                codingPath: decoder.codingPath,
+                debugDescription: "Unsupported site access list response format."
+            )
+            throw DecodingError.dataCorrupted(context)
+        }
+    }
+}
+
+private struct DynamicCodingKeys: CodingKey, Hashable {
+    var stringValue: String
+    var intValue: Int?
+
+    init(_ stringValue: String) {
+        self.stringValue = stringValue
+        self.intValue = nil
+    }
+
+    init?(stringValue: String) {
+        self.init(stringValue)
+    }
+
+    init?(intValue: Int) {
+        self.stringValue = "\(intValue)"
+        self.intValue = intValue
+    }
 }
 
 private struct SiteAccess: Decodable {
