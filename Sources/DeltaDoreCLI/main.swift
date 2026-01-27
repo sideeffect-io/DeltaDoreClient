@@ -64,6 +64,7 @@ private struct AutoOptions: Sendable {
     let remoteHost: String?
     let listSites: Bool
     let forceRemote: Bool
+    let dumpSitesResponse: Bool
 }
 
 private struct ResolveOptions: Sendable {
@@ -78,6 +79,7 @@ private struct ResolveOptions: Sendable {
     let pollInterval: Int
     let pollOnlyActive: Bool
     let allowInsecureTLS: Bool?
+    let dumpSitesResponse: Bool
 }
 
 private enum CLICommand: Sendable {
@@ -242,6 +244,7 @@ private func resolveAutoConfiguration(
         cloudCredentials: options.cloudCredentials,
         siteIndex: options.siteIndex,
         listSites: options.listSites,
+        dumpSitesResponse: options.dumpSitesResponse,
         store: store,
         stdout: stdout,
         stderr: stderr
@@ -305,6 +308,7 @@ private func resolveExplicitConfiguration(
         cloudCredentials: options.cloudCredentials,
         siteIndex: options.siteIndex,
         listSites: options.listSites,
+        dumpSitesResponse: options.dumpSitesResponse,
         store: store,
         stdout: stdout,
         stderr: stderr
@@ -354,6 +358,7 @@ private func resolveGatewayCredentials(
     cloudCredentials: TydomConnection.CloudCredentials?,
     siteIndex: Int?,
     listSites: Bool,
+    dumpSitesResponse: Bool,
     store: TydomGatewayCredentialStore,
     stdout: ConsoleWriter,
     stderr: ConsoleWriter
@@ -366,6 +371,17 @@ private func resolveGatewayCredentials(
         }
         let session = URLSession(configuration: .default)
         do {
+            if dumpSitesResponse {
+                let payload = try await TydomCloudSitesProvider.fetchSitesPayload(
+                    email: cloudCredentials.email,
+                    password: cloudCredentials.password,
+                    session: session
+                )
+                session.invalidateAndCancel()
+                let output = String(data: payload, encoding: .utf8) ?? "<non-utf8>"
+                await stdout.writeLine(output)
+                return nil
+            }
             let sites = try await TydomCloudSitesProvider.fetchSites(
                 email: cloudCredentials.email,
                 password: cloudCredentials.password,
@@ -518,6 +534,7 @@ private func parseArguments(_ args: [String]) -> StartupAction {
     var allowInsecureTLS: Bool?
     var listSites: Bool = false
     var forceRemote: Bool = false
+    var dumpSitesResponse: Bool = false
 
     var index = 0
     while index < args.count {
@@ -563,6 +580,8 @@ private func parseArguments(_ args: [String]) -> StartupAction {
             listSites = true
         case "--no-local":
             forceRemote = true
+        case "--dump-sites-response":
+            dumpSitesResponse = true
         case "--timeout":
             index += 1
             guard index < args.count, let value = TimeInterval(args[index]) else {
@@ -619,7 +638,8 @@ private func parseArguments(_ args: [String]) -> StartupAction {
                 timeout: timeout,
                 pollInterval: pollInterval,
                 pollOnlyActive: pollOnlyActive,
-                allowInsecureTLS: allowInsecureTLS
+                allowInsecureTLS: allowInsecureTLS,
+                dumpSitesResponse: dumpSitesResponse
             )
             return .runResolved(options)
         }
@@ -640,7 +660,8 @@ private func parseArguments(_ args: [String]) -> StartupAction {
                 timeout: timeout,
                 pollInterval: pollInterval,
                 pollOnlyActive: pollOnlyActive,
-                allowInsecureTLS: allowInsecureTLS
+                allowInsecureTLS: allowInsecureTLS,
+                dumpSitesResponse: dumpSitesResponse
             )
             return .runResolved(options)
         }
@@ -659,7 +680,8 @@ private func parseArguments(_ args: [String]) -> StartupAction {
             allowInsecureTLS: allowInsecureTLS,
             remoteHost: host,
             listSites: listSites,
-            forceRemote: forceRemote
+            forceRemote: forceRemote,
+            dumpSitesResponse: dumpSitesResponse
         )
         return .runAuto(options)
     default:
@@ -847,6 +869,7 @@ private func helpText() -> String {
     lines.append("  --bonjour-service <type>      Bonjour service type (repeatable)")
     lines.append("  --list-sites                  List available sites and exit (auto mode)")
     lines.append("  --no-local                    Force remote even if local is available (auto mode)")
+    lines.append("  --dump-sites-response         Print raw site list response and exit")
     lines.append("  --timeout <seconds>           Request timeout (default: 10)")
     lines.append("  --poll-interval <seconds>     Polling interval (default: 60, 0 disables)")
     lines.append("  --poll-only-active <bool>     Poll only when active (default: true)")
