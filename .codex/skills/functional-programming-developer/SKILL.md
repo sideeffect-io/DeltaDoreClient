@@ -1,52 +1,73 @@
 ---
 name: functional-programming-developer
-description: Trigger this skill to find guidance for applying functional architecture both in code and unit tests (immutability, pure functions, composition) in this Swift package with testability in mind.
+description: Functional architecture guidance for Swift (immutability, pure functions, reducers, DI via functions).
 ---
 
 # Functional Architecture in Swift
 
-Use this skill when you structure code following functional design patterns and SOLID principles.
+Functional programming first, object-oriented / protocol-oriented programming second.
+
+This skill guides how to design **domain and core logic** in Swift using
+immutability, pure functions, and explicit effects.
+
+---
 
 ## When to use
-Use this skill when an agent must generate, review, or refactor code for the domain and core logic of this package.
-Think functional programming first, object oriented programming next.
 
-## Core Tenets
-- **Inert Domain**: Use `struct`/`enum` with `let` fields (immutable). Avoid global shared mutable state.
-- **Pure Computations**: Functions should be deterministic, highly testable and side-effect–free.
-- **Combinators**: Compose small functions to build pipelines.
-- **Higher order functions and Partial Application**: Inject dependencies as first-class functions. Use structs of closures when there are too many functions to inject.
-- **Declarative code** over Imperative code. 
+- Domain modeling
+- Feature / business logic
+- Reducers and workflows
+- Dependency-injected use cases
+- Highly testable code
 
-## How to do dependency injection in the context of functional programming
+---
 
-- Pass only necessary functions into pure core logic instead of protocols. Use lazy closures for expensive resources.
-- Define small capability structs of closures as an encapsulation mechanism when too many functions should be passed.
-- Dependency structs of closures should be defined close to where they're needed, probably in the same file.
-- Concrete implementations of these structs of closures should be defined as extensions.
-- Avoid large mock protocols; use closures for easy test fakes.
+## Architectural patterns
 
-## How to apply SOLID principles in the context of functional programming
+- Functional Core / Imperative Shell
+- Feature-oriented design
+- Dependency injection via functions
+- Mealy & extended state machines
+- Effects as data
 
-- **Single Responsibility**: One reason to change; small focused types.
-- **Open/Closed**: Extend via composition, not modification.
-- **Liskov Substitution**: Functions uphold expected contracts.
-- **Interface Segregation**: Inject minimal capabilities.
-- **Dependency Inversion**: Domain depends on abstract functions, not concrete implementations.
+---
 
-## How to test
+## Functional techniques
 
-- Focus on unit tests (not integration tests).
-- Inject fake closures that record invocations.
-- Use in-memory stores and fake clocks.
-- Never rely on hard coded timers or sleep durations.
-- Always use the Swift Testing framework and group related tests into a Suite.
-- Include //Given //When //Then comments in a unit test flow to ease the reading.
+- Algebraic Data Types (enum + struct)
+- Functional operators (map, flatMap, reduce)
+- Partial application & currying
+- Optics (Lenses & Prisms with KeyPaths)
 
-## Edge Cases
-- If performance demands localized mutation, confine it and return a value.
-- When using object oriented programming and shared references makes sens then use it.
+---
 
-## References
+## Reading order
 
-Read `references/functional-programming-samples.md` for simple examples of functional programming usages.
+1. references/state-machines.md
+2. references/functional-operators.md
+3. references/algebraic-data-types.md
+4. references/optics.md
+5. references/dependency-injection-currying.md
+6. references/dependency-injection-decision-table.md
+
+---
+
+## Dependency injection rules
+
+- Closures first
+- Capability structs second
+- Protocols last (boundary only)
+
+---
+
+## Testing rules
+
+- Unit tests only in the core
+- Fake closures instead of mocks
+- No sleeps or timers
+
+---
+
+## Summary
+
+If it’s hard to test, simplify the design.
