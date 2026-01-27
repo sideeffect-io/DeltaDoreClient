@@ -8,6 +8,22 @@ public struct TydomConnectionOrchestrator: Sendable {
         public let connectLocal: @Sendable (_ host: String) async -> Bool
         public let connectRemote: @Sendable () async -> Bool
         public let emitDecision: @Sendable (_ decision: TydomConnectionState.Decision) async -> Void
+
+        public init(
+            loadCredentials: @escaping @Sendable () async -> TydomGatewayCredentials?,
+            saveCredentials: @escaping @Sendable (_ credentials: TydomGatewayCredentials) async -> Void,
+            discoverLocal: @escaping @Sendable () async -> [TydomLocalGateway],
+            connectLocal: @escaping @Sendable (_ host: String) async -> Bool,
+            connectRemote: @escaping @Sendable () async -> Bool,
+            emitDecision: @escaping @Sendable (_ decision: TydomConnectionState.Decision) async -> Void
+        ) {
+            self.loadCredentials = loadCredentials
+            self.saveCredentials = saveCredentials
+            self.discoverLocal = discoverLocal
+            self.connectLocal = connectLocal
+            self.connectRemote = connectRemote
+            self.emitDecision = emitDecision
+        }
     }
 
     private let dependencies: Dependencies
