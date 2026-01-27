@@ -657,8 +657,26 @@ private func send(
 
 private func stdinLines() -> AsyncStream<String> {
     AsyncStream { continuation in
-        let task = Task.detached {
-            while let line = readLine() {
+        let task = Task {
+            var buffer = Data()
+            do {
+                for try await byte in FileHandle.standardInput.bytes {
+                    if Task.isCancelled { break }
+                    if byte == 10 { // \\n
+                        if let line = String(data: buffer, encoding: .utf8) {
+                            continuation.yield(line)
+                        }
+                        buffer.removeAll(keepingCapacity: true)
+                        continue
+                    }
+                    if byte != 13 { // ignore \\r
+                        buffer.append(byte)
+                    }
+                }
+            } catch {
+                // stdin stream failed; fall through to finalize
+            }
+            if buffer.isEmpty == false, let line = String(data: buffer, encoding: .utf8) {
                 continuation.yield(line)
             }
             continuation.finish()
