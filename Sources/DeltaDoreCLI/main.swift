@@ -80,6 +80,7 @@ private struct ResolveOptions: Sendable {
     let pollOnlyActive: Bool
     let allowInsecureTLS: Bool?
     let dumpSitesResponse: Bool
+    let bonjourServices: [String]
 }
 
 private enum CLICommand: Sendable {
@@ -323,8 +324,26 @@ private func resolveExplicitConfiguration(
 
     switch options.mode {
     case "local":
-        guard let host = options.host else {
-            await stderr.writeLine("Missing required --host for local mode.")
+        if let host = options.host {
+            return TydomConnection.Configuration(
+                mode: .local(host: host),
+                mac: stored.mac,
+                password: stored.password,
+                cloudCredentials: nil,
+                allowInsecureTLS: options.allowInsecureTLS,
+                timeout: options.timeout,
+                polling: polling
+            )
+        }
+        let host = await resolveLocalHost(
+            stored: stored,
+            bonjourServices: options.bonjourServices,
+            timeout: options.timeout,
+            stdout: stdout,
+            stderr: stderr
+        )
+        guard let host else {
+            await stderr.writeLine("Local discovery failed. Provide --host to override.")
             return nil
         }
         return TydomConnection.Configuration(
@@ -351,6 +370,61 @@ private func resolveExplicitConfiguration(
         await stderr.writeLine("Invalid --mode value. Use local, remote, or auto.")
         return nil
     }
+}
+
+private func resolveLocalHost(
+    stored: TydomGatewayCredentials,
+    bonjourServices: [String],
+    timeout: TimeInterval,
+    stdout: ConsoleWriter,
+    stderr: ConsoleWriter
+) async -> String? {
+    func probeLocal(host: String) async -> Bool {
+        let probePolling = TydomConnection.Configuration.Polling(intervalSeconds: 0, onlyWhenActive: false)
+        let config = TydomConnection.Configuration(
+            mode: .local(host: host),
+            mac: stored.mac,
+            password: stored.password,
+            cloudCredentials: nil,
+            allowInsecureTLS: true,
+            timeout: min(timeout, 4),
+            polling: probePolling
+        )
+        let connection = TydomConnection(configuration: config)
+        do {
+            try await connection.connect()
+            await connection.disconnect()
+            return true
+        } catch {
+            await connection.disconnect()
+            return false
+        }
+    }
+
+    if let cachedIP = stored.cachedLocalIP, cachedIP.isEmpty == false {
+        await stdout.writeLine("Trying cached IP \(cachedIP)...")
+        if await probeLocal(host: cachedIP) {
+            return cachedIP
+        }
+        await stderr.writeLine("Cached IP failed, running discovery.")
+    }
+
+    let discovery = TydomGatewayDiscovery(dependencies: .live())
+    let discoveryConfig = TydomGatewayDiscoveryConfig(
+        discoveryTimeout: min(timeout, 6),
+        probeTimeout: min(timeout, 2),
+        probeConcurrency: 12,
+        probePorts: [443],
+        bonjourServiceTypes: bonjourServices
+    )
+    let candidates = await discovery.discover(mac: stored.mac, cachedIP: nil, config: discoveryConfig)
+    for candidate in candidates {
+        await stdout.writeLine("Probing \(candidate.host) (\(candidate.method.rawValue))...")
+        if await probeLocal(host: candidate.host) {
+            return candidate.host
+        }
+    }
+    return nil
 }
 
 private func resolveGatewayCredentials(
@@ -639,7 +713,8 @@ private func parseArguments(_ args: [String]) -> StartupAction {
                 pollInterval: pollInterval,
                 pollOnlyActive: pollOnlyActive,
                 allowInsecureTLS: allowInsecureTLS,
-                dumpSitesResponse: dumpSitesResponse
+                dumpSitesResponse: dumpSitesResponse,
+                bonjourServices: bonjourServices.isEmpty ? ["_tydom._tcp"] : bonjourServices
             )
             return .runResolved(options)
         }
@@ -661,7 +736,8 @@ private func parseArguments(_ args: [String]) -> StartupAction {
                 pollInterval: pollInterval,
                 pollOnlyActive: pollOnlyActive,
                 allowInsecureTLS: allowInsecureTLS,
-                dumpSitesResponse: dumpSitesResponse
+                dumpSitesResponse: dumpSitesResponse,
+                bonjourServices: bonjourServices.isEmpty ? ["_tydom._tcp"] : bonjourServices
             )
             return .runResolved(options)
         }
@@ -860,7 +936,7 @@ private func helpText() -> String {
     lines.append("")
     lines.append("Options:")
     lines.append("  --mode local|remote|auto      Connection mode (default: local)")
-    lines.append("  --host <host>                 Gateway IP or host (required for local)")
+    lines.append("  --host <host>                 Gateway IP or host (overrides local discovery)")
     lines.append("  --mac <mac>                   Gateway MAC address (optional with cloud login)")
     lines.append("  --password <password>         Local gateway password")
     lines.append("  --cloud-email <email>         Cloud account email")
