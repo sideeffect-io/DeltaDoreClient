@@ -128,23 +128,32 @@ private func extractCandidateArrays(from json: Any) -> [[[String: Any]]] {
 }
 
 private func parseSite(from dict: [String: Any]) -> TydomCloudSitesProvider.Site? {
-    let id = (dict["id"] as? String)
+    let sitePayload = dict["site"] as? [String: Any] ?? dict
+    let id = (sitePayload["id"] as? String)
+        ?? (dict["id"] as? String)
         ?? (dict["siteId"] as? String)
         ?? (dict["site_id"] as? String)
         ?? UUID().uuidString
-    let name = (dict["name"] as? String)
+    let name = (dict["label"] as? String)
+        ?? (sitePayload["label"] as? String)
+        ?? (sitePayload["name"] as? String)
+        ?? (dict["name"] as? String)
         ?? (dict["siteName"] as? String)
-        ?? (dict["label"] as? String)
         ?? "Unnamed Site"
 
     var gateways: [TydomCloudSitesProvider.Gateway] = []
-    if let gatewayDict = dict["gateway"] as? [String: Any] {
+    if let gatewayDict = sitePayload["gateway"] as? [String: Any] {
         if let gateway = parseGateway(from: gatewayDict) {
             gateways.append(gateway)
         }
     }
-    if let gatewaysArray = dict["gateways"] as? [[String: Any]] {
+    if let gatewaysArray = sitePayload["gateways"] as? [[String: Any]] {
         gateways.append(contentsOf: gatewaysArray.compactMap(parseGateway(from:)))
+    }
+    if gateways.isEmpty, let gatewayDict = dict["gateway"] as? [String: Any] {
+        if let gateway = parseGateway(from: gatewayDict) {
+            gateways.append(gateway)
+        }
     }
 
     guard gateways.isEmpty == false else { return nil }
@@ -170,6 +179,7 @@ private struct SiteAccessListResponse: Decodable {
         if let keyed {
             decodedSites = decodedSites ?? (try? keyed.decode([SiteAccess].self, forKey: DynamicCodingKeys("sites")))
             decodedSites = decodedSites ?? (try? keyed.decode([SiteAccess].self, forKey: DynamicCodingKeys("siteAccessList")))
+            decodedSites = decodedSites ?? (try? keyed.decode([SiteAccess].self, forKey: DynamicCodingKeys("site_access_list")))
             if decodedSites == nil,
                let dataContainer = try? keyed.nestedContainer(
                    keyedBy: DynamicCodingKeys.self,
@@ -177,6 +187,7 @@ private struct SiteAccessListResponse: Decodable {
                ) {
                 decodedSites = decodedSites ?? (try? dataContainer.decode([SiteAccess].self, forKey: DynamicCodingKeys("sites")))
                 decodedSites = decodedSites ?? (try? dataContainer.decode([SiteAccess].self, forKey: DynamicCodingKeys("siteAccessList")))
+                decodedSites = decodedSites ?? (try? dataContainer.decode([SiteAccess].self, forKey: DynamicCodingKeys("site_access_list")))
             }
         }
 
