@@ -74,10 +74,18 @@ private enum BonjourDiscovery {
 private enum NetworkProbe {
     static func tcpProbe(host: String, port: Int, timeout: TimeInterval) async -> Bool {
         await withCheckedContinuation { continuation in
+            guard port > 0, port <= 65535, let portValue = UInt16(exactly: port) else {
+                continuation.resume(returning: false)
+                return
+            }
             let endpoint = NWEndpoint.Host(host)
             let parameters = NWParameters.tcp
             let gate = ContinuationGate()
-            let connection = NWConnection(host: endpoint, port: NWEndpoint.Port(rawValue: UInt16(port))!, using: parameters)
+            guard let nwPort = NWEndpoint.Port(rawValue: portValue) else {
+                continuation.resume(returning: false)
+                return
+            }
+            let connection = NWConnection(host: endpoint, port: nwPort, using: parameters)
             let queue = DispatchQueue(label: "tydom.tcp.probe")
 
             connection.stateUpdateHandler = { state in
@@ -119,10 +127,15 @@ private enum NetworkProbe {
                 continue
             }
 
-            let addrFamily = ifaddr.ifa_addr.pointee.sa_family
+            guard let addrPointer = ifaddr.ifa_addr, let maskPointer = ifaddr.ifa_netmask else {
+                pointer = ifaddr.ifa_next
+                continue
+            }
+
+            let addrFamily = addrPointer.pointee.sa_family
             if addrFamily == UInt8(AF_INET) {
-                let addr = unsafeBitCast(ifaddr.ifa_addr, to: UnsafePointer<sockaddr_in>.self).pointee
-                let mask = unsafeBitCast(ifaddr.ifa_netmask, to: UnsafePointer<sockaddr_in>.self).pointee
+                let addr = unsafeBitCast(addrPointer, to: UnsafePointer<sockaddr_in>.self).pointee
+                let mask = unsafeBitCast(maskPointer, to: UnsafePointer<sockaddr_in>.self).pointee
                 let ip = UInt32(bigEndian: addr.sin_addr.s_addr)
                 let netmask = UInt32(bigEndian: mask.sin_addr.s_addr)
                 let network = ip & netmask

@@ -377,6 +377,8 @@ private func resolveExplicitConfiguration(
             intervalSeconds: options.pollInterval,
             onlyWhenActive: options.pollOnlyActive
         ),
+        localHostOverride: options.mode == "local" ? options.host : nil,
+        remoteHostOverride: options.mode == "remote" ? options.host : nil,
         onDisconnect: onDisconnect
     )
 }
@@ -517,12 +519,15 @@ private func buildConfiguration(
     allowInsecureTLS: Bool?,
     timeout: TimeInterval,
     polling: TydomConnection.Configuration.Polling,
+    localHostOverride: String?,
+    remoteHostOverride: String?,
     onDisconnect: (@Sendable () async -> Void)?
 ) -> TydomConnection.Configuration? {
     switch decision.mode {
     case .local(let host):
+        let resolvedHost = (localHostOverride?.isEmpty == false) ? localHostOverride! : host
         return TydomConnection.Configuration(
-            mode: .local(host: host),
+            mode: .local(host: resolvedHost),
             mac: mac,
             password: password,
             cloudCredentials: nil,
@@ -532,8 +537,9 @@ private func buildConfiguration(
             onDisconnect: onDisconnect
         )
     case .remote(let host):
+        let resolvedHost = (remoteHostOverride?.isEmpty == false) ? remoteHostOverride! : host
         return TydomConnection.Configuration(
-            mode: .remote(host: host),
+            mode: .remote(host: resolvedHost),
             mac: mac,
             password: password,
             cloudCredentials: nil,
