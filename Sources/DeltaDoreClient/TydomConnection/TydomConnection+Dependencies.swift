@@ -7,22 +7,25 @@ extension TydomConnection {
         var now: @Sendable () -> Date
         var fetchGatewayPassword: @Sendable (_ credentials: CloudCredentials, _ mac: String, _ session: URLSession) async throws -> String
         var invalidateSession: @Sendable (_ session: URLSession) -> Void
+        var onDisconnect: @Sendable () async -> Void
 
         init(
             makeSession: @Sendable @escaping (_ allowInsecureTLS: Bool, _ timeout: TimeInterval, _ credential: URLCredential?) -> URLSession,
             randomBytes: @Sendable @escaping (_ count: Int) -> [UInt8],
             now: @Sendable @escaping () -> Date,
             fetchGatewayPassword: @Sendable @escaping (_ credentials: CloudCredentials, _ mac: String, _ session: URLSession) async throws -> String,
-            invalidateSession: @Sendable @escaping (_ session: URLSession) -> Void = { $0.invalidateAndCancel() }
+            invalidateSession: @Sendable @escaping (_ session: URLSession) -> Void = { $0.invalidateAndCancel() },
+            onDisconnect: @Sendable @escaping () async -> Void = {}
         ) {
             self.makeSession = makeSession
             self.randomBytes = randomBytes
             self.now = now
             self.fetchGatewayPassword = fetchGatewayPassword
             self.invalidateSession = invalidateSession
+            self.onDisconnect = onDisconnect
         }
 
-        static func live() -> Dependencies {
+        static func live(onDisconnect: @escaping @Sendable () async -> Void = {}) -> Dependencies {
             Dependencies(
                 makeSession: { allowInsecureTLS, timeout, credential in
                     let configuration = URLSessionConfiguration.default
@@ -48,7 +51,8 @@ extension TydomConnection {
                 },
                 invalidateSession: { session in
                     session.invalidateAndCancel()
-                }
+                },
+                onDisconnect: onDisconnect
             )
         }
     }
