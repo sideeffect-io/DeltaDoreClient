@@ -134,8 +134,8 @@ private enum NetworkProbe {
 
             let addrFamily = addrPointer.pointee.sa_family
             if addrFamily == UInt8(AF_INET) {
-                let addr = unsafeBitCast(addrPointer, to: UnsafePointer<sockaddr_in>.self).pointee
-                let mask = unsafeBitCast(maskPointer, to: UnsafePointer<sockaddr_in>.self).pointee
+                let addr = addrPointer.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { $0.pointee }
+                let mask = maskPointer.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { $0.pointee }
                 let ip = UInt32(bigEndian: addr.sin_addr.s_addr)
                 let netmask = UInt32(bigEndian: mask.sin_addr.s_addr)
                 let network = ip & netmask
