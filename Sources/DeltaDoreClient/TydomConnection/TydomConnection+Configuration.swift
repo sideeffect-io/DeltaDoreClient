@@ -43,6 +43,7 @@ extension TydomConnection {
         public let timeout: TimeInterval
         public let polling: Polling
         public let keepAlive: KeepAlive
+        public let onDisconnect: (@Sendable () async -> Void)?
 
         public init(
             mode: Mode,
@@ -52,7 +53,8 @@ extension TydomConnection {
             allowInsecureTLS: Bool? = nil,
             timeout: TimeInterval = 10.0,
             polling: Polling = Polling(),
-            keepAlive: KeepAlive = KeepAlive()
+            keepAlive: KeepAlive = KeepAlive(),
+            onDisconnect: (@Sendable () async -> Void)? = nil
         ) {
             self.mode = mode
             self.mac = mac
@@ -62,6 +64,7 @@ extension TydomConnection {
             self.timeout = timeout
             self.polling = polling
             self.keepAlive = keepAlive
+            self.onDisconnect = onDisconnect
         }
 
         var normalizedMac: String {
