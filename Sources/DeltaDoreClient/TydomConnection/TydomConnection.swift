@@ -128,6 +128,9 @@ public actor TydomConnection {
         }
         session = nil
         log("Disconnected.")
+        if let onDisconnect = configuration.onDisconnect {
+            Task { await onDisconnect() }
+        }
     }
 
     public func send(_ data: Data) async throws {
