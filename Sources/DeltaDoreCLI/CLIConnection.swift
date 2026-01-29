@@ -81,139 +81,52 @@ func resolveAutoConfiguration(
     stdout: ConsoleWriter,
     stderr: ConsoleWriter
 ) async -> CLIOptions? {
-    let store = TydomGatewayCredentialStore.liveKeychain(service: "com.deltadore.tydom.cli")
-    let selectedSiteStore = TydomSelectedSiteStore.liveKeychain(service: "com.deltadore.tydom.cli.site-selection")
-    let selectedSiteAccount = "default"
-    let remoteHost = options.remoteHost ?? "mediation.tydom.com"
-    let onDisconnect: (@Sendable () async -> Void) = {
-        try? await selectedSiteStore.delete(selectedSiteAccount)
-    }
-
-    func makePolling() -> TydomConnection.Configuration.Polling {
-        TydomConnection.Configuration.Polling(
-            intervalSeconds: options.pollInterval,
-            onlyWhenActive: options.pollOnlyActive
-        )
-    }
-
-    func localConfig(
-        mac: String,
-        password: String,
-        host: String,
-        polling: TydomConnection.Configuration.Polling
-    ) -> TydomConnection.Configuration {
-        TydomConnection.Configuration(
-            mode: .local(host: host),
-            mac: mac,
-            password: password,
-            cloudCredentials: nil,
-            allowInsecureTLS: options.allowInsecureTLS,
-            timeout: options.timeout,
-            polling: polling
-        )
-    }
-
-    func remoteConfig(
-        mac: String,
-        password: String,
-        polling: TydomConnection.Configuration.Polling
-    ) -> TydomConnection.Configuration {
-        TydomConnection.Configuration(
-            mode: .remote(host: remoteHost),
-            mac: mac,
-            password: password,
-            cloudCredentials: nil,
-            allowInsecureTLS: options.allowInsecureTLS,
-            timeout: options.timeout,
-            polling: polling
-        )
-    }
-
-    func probeLocal(mac: String, password: String, host: String) async -> Bool {
-        let probePolling = TydomConnection.Configuration.Polling(intervalSeconds: 0, onlyWhenActive: false)
-        let config = localConfig(mac: mac, password: password, host: host, polling: probePolling)
-        let connection = TydomConnection(configuration: config)
-        do {
-            try await connection.connect()
-            await connection.disconnect()
-            return true
-        } catch {
-            await connection.disconnect()
-            return false
-        }
-    }
-
-    guard let stored = await resolveGatewayCredentials(
-        mac: options.mac,
-        cloudCredentials: options.cloudCredentials,
-        siteIndex: options.siteIndex,
+    let resolver = makeResolver()
+    if await handleSiteListingIfNeeded(
         listSites: options.listSites,
         dumpSitesResponse: options.dumpSitesResponse,
-        resetSite: options.resetSite,
-        selectedSiteStore: selectedSiteStore,
-        selectedSiteAccount: selectedSiteAccount,
-        store: store,
+        cloudCredentials: options.cloudCredentials,
+        resolver: resolver,
         stdout: stdout,
         stderr: stderr
-    ) else {
+    ) {
         return nil
     }
 
-    if options.forceRemote {
-        await stderr.writeLine("Local connection disabled by --no-local. Falling back to remote.")
-        return CLIOptions(
-            configuration: remoteConfig(mac: stored.mac, password: stored.password, polling: makePolling()),
-            onDisconnect: onDisconnect
-        )
-    }
-
-    if let cachedIP = stored.cachedLocalIP, cachedIP.isEmpty == false {
-        await stdout.writeLine("Trying cached IP \(cachedIP)...")
-        if await probeLocal(mac: stored.mac, password: stored.password, host: cachedIP) {
-            return CLIOptions(
-                configuration: localConfig(mac: stored.mac, password: stored.password, host: cachedIP, polling: makePolling()),
-                onDisconnect: onDisconnect
-            )
-        }
-        await stderr.writeLine("Cached IP failed, running discovery.")
-    }
-
-    let discovery = TydomGatewayDiscovery(dependencies: .live())
-    let discoveryConfig = TydomGatewayDiscoveryConfig(
-        discoveryTimeout: min(options.timeout, 6),
-        probeTimeout: min(options.timeout, 2),
-        probeConcurrency: 12,
-        probePorts: [443],
-        bonjourServiceTypes: options.bonjourServices
+    let polling = TydomConnection.Configuration.Polling(
+        intervalSeconds: options.pollInterval,
+        onlyWhenActive: options.pollOnlyActive
     )
-    let candidates = await discovery.discover(mac: stored.mac, cachedIP: nil, config: discoveryConfig)
-    for candidate in candidates {
-        await stdout.writeLine("Probing \(candidate.host) (\(candidate.method.rawValue))...")
-        if await probeLocal(mac: stored.mac, password: stored.password, host: candidate.host) {
-            let updated = TydomGatewayCredentials(
-                mac: stored.mac,
-                password: stored.password,
-                cachedLocalIP: candidate.host,
-                updatedAt: Date()
-            )
-            do {
-                let gatewayId = TydomMac.normalize(stored.mac)
-                try await store.save(gatewayId, updated)
-            } catch {
-                await stderr.writeLine("Failed to persist cached IP: \(error)")
+    let resolverOptions = TydomConnectionResolver.Options(
+        mode: .auto,
+        remoteHostOverride: options.remoteHost,
+        mac: options.mac,
+        cloudCredentials: options.cloudCredentials,
+        siteIndex: options.siteIndex,
+        resetSelectedSite: options.resetSite,
+        selectedSiteAccount: "default",
+        allowInsecureTLS: options.allowInsecureTLS,
+        timeout: options.timeout,
+        polling: polling,
+        bonjourServices: options.bonjourServices,
+        forceRemote: options.forceRemote
+    )
+
+    do {
+        let resolution = try await resolver.resolve(
+            resolverOptions,
+            selectSiteIndex: { sites in
+                await chooseSiteIndex(sites, stdout: stdout, stderr: stderr)
             }
-            return CLIOptions(
-                configuration: localConfig(mac: stored.mac, password: stored.password, host: candidate.host, polling: makePolling()),
-                onDisconnect: onDisconnect
-            )
-        }
+        )
+        return CLIOptions(
+            configuration: resolution.configuration,
+            onDisconnect: resolution.onDisconnect
+        )
+    } catch {
+        await stderr.writeLine("Failed to resolve connection: \(error.localizedDescription)")
+        return nil
     }
-
-    await stderr.writeLine("Local connection failed, falling back to remote.")
-    return CLIOptions(
-        configuration: remoteConfig(mac: stored.mac, password: stored.password, polling: makePolling()),
-        onDisconnect: onDisconnect
-    )
 }
 
 func resolveExplicitConfiguration(
@@ -221,228 +134,105 @@ func resolveExplicitConfiguration(
     stdout: ConsoleWriter,
     stderr: ConsoleWriter
 ) async -> CLIOptions? {
-    let store = TydomGatewayCredentialStore.liveKeychain(service: "com.deltadore.tydom.cli")
-    let selectedSiteStore = TydomSelectedSiteStore.liveKeychain(service: "com.deltadore.tydom.cli.site-selection")
-    let selectedSiteAccount = "default"
-    let credentialsCache = CredentialsCache()
-    let onDisconnect: (@Sendable () async -> Void) = {
-        try? await selectedSiteStore.delete(selectedSiteAccount)
+    let resolver = makeResolver()
+    if await handleSiteListingIfNeeded(
+        listSites: options.listSites,
+        dumpSitesResponse: options.dumpSitesResponse,
+        cloudCredentials: options.cloudCredentials,
+        resolver: resolver,
+        stdout: stdout,
+        stderr: stderr
+    ) {
+        return nil
     }
-    let dependencies = makeOrchestratorDependencies(
-        mode: options.mode,
+
+    let mode: TydomConnectionResolver.Options.Mode = options.mode == "remote" ? .remote : .local
+    let polling = TydomConnection.Configuration.Polling(
+        intervalSeconds: options.pollInterval,
+        onlyWhenActive: options.pollOnlyActive
+    )
+    let resolverOptions = TydomConnectionResolver.Options(
+        mode: mode,
         localHostOverride: options.mode == "local" ? options.host : nil,
         remoteHostOverride: options.mode == "remote" ? options.host : nil,
         mac: options.mac,
         password: options.password,
         cloudCredentials: options.cloudCredentials,
         siteIndex: options.siteIndex,
-        listSites: options.listSites,
-        dumpSitesResponse: options.dumpSitesResponse,
+        resetSelectedSite: options.resetSite,
+        selectedSiteAccount: "default",
+        allowInsecureTLS: options.allowInsecureTLS,
+        timeout: options.timeout,
+        polling: polling,
         bonjourServices: options.bonjourServices,
-        timeout: options.timeout,
-        polling: TydomConnection.Configuration.Polling(
-            intervalSeconds: options.pollInterval,
-            onlyWhenActive: options.pollOnlyActive
-        ),
-        allowInsecureTLS: options.allowInsecureTLS,
-        resetSite: options.resetSite,
-        selectedSiteStore: selectedSiteStore,
-        selectedSiteAccount: selectedSiteAccount,
-        store: store,
-        cache: credentialsCache,
-        stdout: stdout,
-        stderr: stderr
+        onDecision: { decision in
+            await stderr.writeLine("Decision: \(decision.reason.rawValue) -> \(decision.mode)")
+        }
     )
 
-    var state = TydomConnectionState(
-        override: options.mode == "remote" ? .forceRemote : .forceLocal
+    do {
+        let resolution = try await resolver.resolve(
+            resolverOptions,
+            selectSiteIndex: { sites in
+                await chooseSiteIndex(sites, stdout: stdout, stderr: stderr)
+            }
+        )
+        return CLIOptions(
+            configuration: resolution.configuration,
+            onDisconnect: resolution.onDisconnect
+        )
+    } catch {
+        await stderr.writeLine("Failed to resolve connection: \(error.localizedDescription)")
+        return nil
+    }
+}
+
+private func makeResolver() -> TydomConnectionResolver {
+    let environment = TydomConnectionResolver.Environment.live(
+        credentialService: "com.deltadore.tydom.cli",
+        selectedSiteService: "com.deltadore.tydom.cli.site-selection"
     )
-    let orchestrator = TydomConnectionOrchestrator(dependencies: dependencies)
-    await orchestrator.handle(event: .start, state: &state)
-    guard let resolved = state.lastDecision, let credentials = state.credentials else {
-        return nil
-    }
-    guard let configuration = buildConfiguration(
-        decision: resolved,
-        mac: credentials.mac,
-        password: credentials.password,
-        allowInsecureTLS: options.allowInsecureTLS,
-        timeout: options.timeout,
-        polling: TydomConnection.Configuration.Polling(
-            intervalSeconds: options.pollInterval,
-            onlyWhenActive: options.pollOnlyActive
-        ),
-        localHostOverride: options.mode == "local" ? options.host : nil,
-        remoteHostOverride: options.mode == "remote" ? options.host : nil
-    ) else {
-        return nil
-    }
-    return CLIOptions(configuration: configuration, onDisconnect: onDisconnect)
+    return TydomConnectionResolver(environment: environment)
 }
 
-private actor CredentialsCache {
-    private var cached: TydomGatewayCredentials?
-
-    func get() -> TydomGatewayCredentials? { cached }
-    func set(_ value: TydomGatewayCredentials?) { cached = value }
-}
-
-private func makeOrchestratorDependencies(
-    mode: String,
-    localHostOverride: String?,
-    remoteHostOverride: String?,
-    mac: String?,
-    password: String?,
-    cloudCredentials: TydomConnection.CloudCredentials?,
-    siteIndex: Int?,
+private func handleSiteListingIfNeeded(
     listSites: Bool,
     dumpSitesResponse: Bool,
-    bonjourServices: [String],
-    timeout: TimeInterval,
-    polling: TydomConnection.Configuration.Polling,
-    allowInsecureTLS: Bool?,
-    resetSite: Bool,
-    selectedSiteStore: TydomSelectedSiteStore,
-    selectedSiteAccount: String,
-    store: TydomGatewayCredentialStore,
-    cache: CredentialsCache,
+    cloudCredentials: TydomConnection.CloudCredentials?,
+    resolver: TydomConnectionResolver,
     stdout: ConsoleWriter,
     stderr: ConsoleWriter
-) -> TydomConnectionOrchestrator.Dependencies {
-    let discovery = TydomGatewayDiscovery(dependencies: .live())
-
-    let resolveCredentials: @Sendable () async -> TydomGatewayCredentials? = {
-        if let cached = await cache.get() { return cached }
-        if let mac, let password {
-            let credentials = TydomGatewayCredentials(
-                mac: mac,
-                password: password,
-                cachedLocalIP: nil,
-                updatedAt: Date()
-            )
-            let gatewayId = TydomMac.normalize(mac)
-            try? await store.save(gatewayId, credentials)
-            await cache.set(credentials)
-            return credentials
-        }
-        if let mac {
-            let gatewayId = TydomMac.normalize(mac)
-            if let stored = try? await store.load(gatewayId) {
-                await cache.set(stored)
-                return stored
-            }
-        }
-        let resolved = await resolveGatewayCredentials(
-            mac: mac,
-            cloudCredentials: cloudCredentials,
-            siteIndex: siteIndex,
-            listSites: listSites,
-            dumpSitesResponse: dumpSitesResponse,
-            resetSite: resetSite,
-            selectedSiteStore: selectedSiteStore,
-            selectedSiteAccount: selectedSiteAccount,
-            store: store,
-            stdout: stdout,
-            stderr: stderr
-        )
-        await cache.set(resolved)
-        return resolved
-    }
-
-    let connect: @Sendable (String, TydomGatewayCredentials?, TydomConnection.Configuration.Mode) async -> Bool = { host, credentials, mode in
-        guard let credentials else { return false }
-        let config = TydomConnection.Configuration(
-            mode: mode,
-            mac: credentials.mac,
-            password: credentials.password,
-            cloudCredentials: nil,
-            allowInsecureTLS: allowInsecureTLS,
-            timeout: timeout,
-            polling: polling
-        )
-        let connection = TydomConnection(configuration: config)
-        do {
-            try await connection.connect()
-            await connection.disconnect()
+) async -> Bool {
+    if dumpSitesResponse {
+        guard let cloudCredentials else {
+            await stderr.writeLine("Missing cloud credentials to fetch sites.")
             return true
+        }
+        do {
+            let payload = try await resolver.listSitesPayload(cloudCredentials: cloudCredentials)
+            let output = String(data: payload, encoding: .utf8) ?? "<non-utf8>"
+            await stdout.writeLine(output)
         } catch {
-            await connection.disconnect()
-            return false
+            await stderr.writeLine("Failed to fetch sites: \(error.localizedDescription)")
         }
+        return true
     }
 
-    return TydomConnectionOrchestrator.Dependencies(
-        loadCredentials: {
-            await resolveCredentials()
-        },
-        saveCredentials: { credentials in
-            let gatewayId = TydomMac.normalize(credentials.mac)
-            try? await store.save(gatewayId, credentials)
-            await cache.set(credentials)
-        },
-        discoverLocal: {
-            guard let credentials = await resolveCredentials() else { return [] }
-            let config = TydomGatewayDiscoveryConfig(
-                discoveryTimeout: min(timeout, 6),
-                probeTimeout: min(timeout, 2),
-                probeConcurrency: 12,
-                probePorts: [443],
-                bonjourServiceTypes: bonjourServices
-            )
-            return await discovery.discover(mac: credentials.mac, cachedIP: credentials.cachedLocalIP, config: config)
-        },
-        connectLocal: { host in
-            let credentials = await resolveCredentials()
-            if let overrideHost = localHostOverride, overrideHost.isEmpty == false {
-                return await connect(overrideHost, credentials, .local(host: overrideHost))
-            }
-            return await connect(host, credentials, .local(host: host))
-        },
-        connectRemote: {
-            let credentials = await resolveCredentials()
-            let remoteHost = remoteHostOverride ?? "mediation.tydom.com"
-            return await connect(remoteHost, credentials, .remote(host: remoteHost))
-        },
-        emitDecision: { decision in
-            await stdout.writeLine("Decision: \(decision.reason.rawValue) -> \(decision.mode)")
+    if listSites {
+        guard let cloudCredentials else {
+            await stderr.writeLine("Missing cloud credentials to list sites.")
+            return true
         }
-    )
-}
-
-private func buildConfiguration(
-    decision: TydomConnectionState.Decision,
-    mac: String,
-    password: String,
-    allowInsecureTLS: Bool?,
-    timeout: TimeInterval,
-    polling: TydomConnection.Configuration.Polling,
-    localHostOverride: String?,
-    remoteHostOverride: String?
-) -> TydomConnection.Configuration? {
-    switch decision.mode {
-    case .local(let host):
-        let resolvedHost = (localHostOverride?.isEmpty == false) ? localHostOverride! : host
-        return TydomConnection.Configuration(
-            mode: .local(host: resolvedHost),
-            mac: mac,
-            password: password,
-            cloudCredentials: nil,
-            allowInsecureTLS: allowInsecureTLS,
-            timeout: timeout,
-            polling: polling
-        )
-    case .remote(let host):
-        let resolvedHost = (remoteHostOverride?.isEmpty == false) ? remoteHostOverride! : host
-        return TydomConnection.Configuration(
-            mode: .remote(host: resolvedHost),
-            mac: mac,
-            password: password,
-            cloudCredentials: nil,
-            allowInsecureTLS: allowInsecureTLS,
-            timeout: timeout,
-            polling: polling
-        )
+        do {
+            let sites = try await resolver.listSites(cloudCredentials: cloudCredentials)
+            await printSites(sites, stdout: stdout)
+        } catch {
+            await stderr.writeLine("Failed to fetch sites: \(error.localizedDescription)")
+        }
+        return true
     }
+
+    return false
 }
 
 @discardableResult
