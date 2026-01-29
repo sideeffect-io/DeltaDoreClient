@@ -81,12 +81,12 @@ func resolveAutoConfiguration(
     stdout: ConsoleWriter,
     stderr: ConsoleWriter
 ) async -> CLIOptions? {
-    let resolver = makeResolver()
+    let client = makeClient()
     if await handleSiteListingIfNeeded(
         listSites: options.listSites,
         dumpSitesResponse: options.dumpSitesResponse,
         cloudCredentials: options.cloudCredentials,
-        resolver: resolver,
+        client: client,
         stdout: stdout,
         stderr: stderr
     ) {
@@ -97,7 +97,7 @@ func resolveAutoConfiguration(
         intervalSeconds: options.pollInterval,
         onlyWhenActive: options.pollOnlyActive
     )
-    let resolverOptions = TydomConnectionResolver.Options(
+    let resolverOptions = DeltaDoreClient.Options(
         mode: .auto,
         remoteHostOverride: options.remoteHost,
         mac: options.mac,
@@ -113,8 +113,8 @@ func resolveAutoConfiguration(
     )
 
     do {
-        let resolution = try await resolver.resolve(
-            resolverOptions,
+        let resolution = try await client.resolve(
+            options: resolverOptions,
             selectSiteIndex: { sites in
                 await chooseSiteIndex(sites, stdout: stdout, stderr: stderr)
             }
@@ -134,24 +134,24 @@ func resolveExplicitConfiguration(
     stdout: ConsoleWriter,
     stderr: ConsoleWriter
 ) async -> CLIOptions? {
-    let resolver = makeResolver()
+    let client = makeClient()
     if await handleSiteListingIfNeeded(
         listSites: options.listSites,
         dumpSitesResponse: options.dumpSitesResponse,
         cloudCredentials: options.cloudCredentials,
-        resolver: resolver,
+        client: client,
         stdout: stdout,
         stderr: stderr
     ) {
         return nil
     }
 
-    let mode: TydomConnectionResolver.Options.Mode = options.mode == "remote" ? .remote : .local
+    let mode: DeltaDoreClient.Options.Mode = options.mode == "remote" ? .remote : .local
     let polling = TydomConnection.Configuration.Polling(
         intervalSeconds: options.pollInterval,
         onlyWhenActive: options.pollOnlyActive
     )
-    let resolverOptions = TydomConnectionResolver.Options(
+    let resolverOptions = DeltaDoreClient.Options(
         mode: mode,
         localHostOverride: options.mode == "local" ? options.host : nil,
         remoteHostOverride: options.mode == "remote" ? options.host : nil,
@@ -171,8 +171,8 @@ func resolveExplicitConfiguration(
     )
 
     do {
-        let resolution = try await resolver.resolve(
-            resolverOptions,
+        let resolution = try await client.resolve(
+            options: resolverOptions,
             selectSiteIndex: { sites in
                 await chooseSiteIndex(sites, stdout: stdout, stderr: stderr)
             }
@@ -187,19 +187,18 @@ func resolveExplicitConfiguration(
     }
 }
 
-private func makeResolver() -> TydomConnectionResolver {
-    let environment = TydomConnectionResolver.Environment.live(
+private func makeClient() -> DeltaDoreClient {
+    DeltaDoreClient.live(
         credentialService: "com.deltadore.tydom.cli",
         selectedSiteService: "com.deltadore.tydom.cli.site-selection"
     )
-    return TydomConnectionResolver(environment: environment)
 }
 
 private func handleSiteListingIfNeeded(
     listSites: Bool,
     dumpSitesResponse: Bool,
     cloudCredentials: TydomConnection.CloudCredentials?,
-    resolver: TydomConnectionResolver,
+    client: DeltaDoreClient,
     stdout: ConsoleWriter,
     stderr: ConsoleWriter
 ) async -> Bool {
@@ -209,7 +208,7 @@ private func handleSiteListingIfNeeded(
             return true
         }
         do {
-            let payload = try await resolver.listSitesPayload(cloudCredentials: cloudCredentials)
+            let payload = try await client.listSitesPayload(cloudCredentials: cloudCredentials)
             let output = String(data: payload, encoding: .utf8) ?? "<non-utf8>"
             await stdout.writeLine(output)
         } catch {
@@ -224,7 +223,7 @@ private func handleSiteListingIfNeeded(
             return true
         }
         do {
-            let sites = try await resolver.listSites(cloudCredentials: cloudCredentials)
+            let sites = try await client.listSites(cloudCredentials: cloudCredentials)
             await printSites(sites, stdout: stdout)
         } catch {
             await stderr.writeLine("Failed to fetch sites: \(error.localizedDescription)")
