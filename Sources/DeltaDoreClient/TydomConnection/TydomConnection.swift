@@ -37,14 +37,16 @@ public actor TydomConnection {
 
     public init(
         configuration: Configuration,
-        log: @escaping @Sendable (String) -> Void = { _ in }
+        log: @escaping @Sendable (String) -> Void = { _ in },
+        onDisconnect: (@Sendable () async -> Void)? = nil
     ) {
-        self.init(configuration: configuration, dependencies: .live(), log: log)
+        let dependencies = Dependencies.live(onDisconnect: onDisconnect ?? {})
+        self.init(configuration: configuration, dependencies: dependencies, log: log)
     }
 
     init(
         configuration: Configuration,
-        dependencies: Dependencies = .live(),
+        dependencies: Dependencies,
         log: @escaping @Sendable (String) -> Void = { _ in }
     ) {
         self.configuration = configuration
@@ -128,9 +130,7 @@ public actor TydomConnection {
         }
         session = nil
         log("Disconnected.")
-        if let onDisconnect = configuration.onDisconnect {
-            Task { await onDisconnect() }
-        }
+        Task { await dependencies.onDisconnect() }
     }
 
     public func send(_ data: Data) async throws {

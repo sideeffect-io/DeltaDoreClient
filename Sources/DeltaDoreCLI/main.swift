@@ -19,23 +19,23 @@ struct DeltaDoreCLI {
         case .run(let options):
             await runCLI(options: options, stdout: stdout, stderr: stderr)
         case .runAuto(let options):
-            guard let configuration = await resolveAutoConfiguration(
+            guard let resolved = await resolveAutoConfiguration(
                 options: options,
                 stdout: stdout,
                 stderr: stderr
             ) else {
                 return
             }
-            await runCLI(options: CLIOptions(configuration: configuration), stdout: stdout, stderr: stderr)
+            await runCLI(options: resolved, stdout: stdout, stderr: stderr)
         case .runResolved(let options):
-            guard let configuration = await resolveExplicitConfiguration(
+            guard let resolved = await resolveExplicitConfiguration(
                 options: options,
                 stdout: stdout,
                 stderr: stderr
             ) else {
                 return
             }
-            await runCLI(options: CLIOptions(configuration: configuration), stdout: stdout, stderr: stderr)
+            await runCLI(options: resolved, stdout: stdout, stderr: stderr)
         }
     }
 }
@@ -50,6 +50,7 @@ private enum StartupAction: Sendable {
 
 private struct CLIOptions: Sendable {
     let configuration: TydomConnection.Configuration
+    let onDisconnect: (@Sendable () async -> Void)?
 }
 
 private struct AutoOptions: Sendable {
@@ -124,7 +125,8 @@ private func runCLI(
         configuration: options.configuration,
         log: { message in
             Task { await stderr.writeLine("[connection] \(message)") }
-        }
+        },
+        onDisconnect: options.onDisconnect
     )
     await connection.setAppActive(true)
 
@@ -193,7 +195,7 @@ private func resolveAutoConfiguration(
     options: AutoOptions,
     stdout: ConsoleWriter,
     stderr: ConsoleWriter
-) async -> TydomConnection.Configuration? {
+) async -> CLIOptions? {
     let store = TydomGatewayCredentialStore.liveKeychain(service: "com.deltadore.tydom.cli")
     let selectedSiteStore = TydomSelectedSiteStore.liveKeychain(service: "com.deltadore.tydom.cli.site-selection")
     let selectedSiteAccount = "default"
@@ -213,8 +215,7 @@ private func resolveAutoConfiguration(
         mac: String,
         password: String,
         host: String,
-        polling: TydomConnection.Configuration.Polling,
-        onDisconnect: (@Sendable () async -> Void)? = nil
+        polling: TydomConnection.Configuration.Polling
     ) -> TydomConnection.Configuration {
         TydomConnection.Configuration(
             mode: .local(host: host),
@@ -223,16 +224,14 @@ private func resolveAutoConfiguration(
             cloudCredentials: nil,
             allowInsecureTLS: options.allowInsecureTLS,
             timeout: options.timeout,
-            polling: polling,
-            onDisconnect: onDisconnect
+            polling: polling
         )
     }
 
     func remoteConfig(
         mac: String,
         password: String,
-        polling: TydomConnection.Configuration.Polling,
-        onDisconnect: (@Sendable () async -> Void)? = nil
+        polling: TydomConnection.Configuration.Polling
     ) -> TydomConnection.Configuration {
         TydomConnection.Configuration(
             mode: .remote(host: remoteHost),
@@ -241,8 +240,7 @@ private func resolveAutoConfiguration(
             cloudCredentials: nil,
             allowInsecureTLS: options.allowInsecureTLS,
             timeout: options.timeout,
-            polling: polling,
-            onDisconnect: onDisconnect
+            polling: polling
         )
     }
 
@@ -278,13 +276,19 @@ private func resolveAutoConfiguration(
 
     if options.forceRemote {
         await stderr.writeLine("Local connection disabled by --no-local. Falling back to remote.")
-        return remoteConfig(mac: stored.mac, password: stored.password, polling: makePolling(), onDisconnect: onDisconnect)
+        return CLIOptions(
+            configuration: remoteConfig(mac: stored.mac, password: stored.password, polling: makePolling()),
+            onDisconnect: onDisconnect
+        )
     }
 
     if let cachedIP = stored.cachedLocalIP, cachedIP.isEmpty == false {
         await stdout.writeLine("Trying cached IP \(cachedIP)...")
         if await probeLocal(mac: stored.mac, password: stored.password, host: cachedIP) {
-            return localConfig(mac: stored.mac, password: stored.password, host: cachedIP, polling: makePolling(), onDisconnect: onDisconnect)
+            return CLIOptions(
+                configuration: localConfig(mac: stored.mac, password: stored.password, host: cachedIP, polling: makePolling()),
+                onDisconnect: onDisconnect
+            )
         }
         await stderr.writeLine("Cached IP failed, running discovery.")
     }
@@ -313,19 +317,25 @@ private func resolveAutoConfiguration(
             } catch {
                 await stderr.writeLine("Failed to persist cached IP: \(error)")
             }
-            return localConfig(mac: stored.mac, password: stored.password, host: candidate.host, polling: makePolling(), onDisconnect: onDisconnect)
+            return CLIOptions(
+                configuration: localConfig(mac: stored.mac, password: stored.password, host: candidate.host, polling: makePolling()),
+                onDisconnect: onDisconnect
+            )
         }
     }
 
     await stderr.writeLine("Local connection failed, falling back to remote.")
-    return remoteConfig(mac: stored.mac, password: stored.password, polling: makePolling(), onDisconnect: onDisconnect)
+    return CLIOptions(
+        configuration: remoteConfig(mac: stored.mac, password: stored.password, polling: makePolling()),
+        onDisconnect: onDisconnect
+    )
 }
 
 private func resolveExplicitConfiguration(
     options: ResolveOptions,
     stdout: ConsoleWriter,
     stderr: ConsoleWriter
-) async -> TydomConnection.Configuration? {
+) async -> CLIOptions? {
     let store = TydomGatewayCredentialStore.liveKeychain(service: "com.deltadore.tydom.cli")
     let selectedSiteStore = TydomSelectedSiteStore.liveKeychain(service: "com.deltadore.tydom.cli.site-selection")
     let selectedSiteAccount = "default"
@@ -367,7 +377,7 @@ private func resolveExplicitConfiguration(
     guard let resolved = state.lastDecision, let credentials = state.credentials else {
         return nil
     }
-    return buildConfiguration(
+    guard let configuration = buildConfiguration(
         decision: resolved,
         mac: credentials.mac,
         password: credentials.password,
@@ -378,9 +388,11 @@ private func resolveExplicitConfiguration(
             onlyWhenActive: options.pollOnlyActive
         ),
         localHostOverride: options.mode == "local" ? options.host : nil,
-        remoteHostOverride: options.mode == "remote" ? options.host : nil,
-        onDisconnect: onDisconnect
-    )
+        remoteHostOverride: options.mode == "remote" ? options.host : nil
+    ) else {
+        return nil
+    }
+    return CLIOptions(configuration: configuration, onDisconnect: onDisconnect)
 }
 
 private actor CredentialsCache {
@@ -520,8 +532,7 @@ private func buildConfiguration(
     timeout: TimeInterval,
     polling: TydomConnection.Configuration.Polling,
     localHostOverride: String?,
-    remoteHostOverride: String?,
-    onDisconnect: (@Sendable () async -> Void)?
+    remoteHostOverride: String?
 ) -> TydomConnection.Configuration? {
     switch decision.mode {
     case .local(let host):
@@ -533,8 +544,7 @@ private func buildConfiguration(
             cloudCredentials: nil,
             allowInsecureTLS: allowInsecureTLS,
             timeout: timeout,
-            polling: polling,
-            onDisconnect: onDisconnect
+            polling: polling
         )
     case .remote(let host):
         let resolvedHost = (remoteHostOverride?.isEmpty == false) ? remoteHostOverride! : host
@@ -545,8 +555,7 @@ private func buildConfiguration(
             cloudCredentials: nil,
             allowInsecureTLS: allowInsecureTLS,
             timeout: timeout,
-            polling: polling,
-            onDisconnect: onDisconnect
+            polling: polling
         )
     }
 }
@@ -646,11 +655,11 @@ private func resolveSelectedSite(
 
     let shouldBypassCache = listSites || siteIndex != nil || resetSite || dumpSitesResponse
     if shouldBypassCache == false {
-        do {
-            if let stored = try await selectedSiteStore.load(selectedSiteAccount) {
-                await stdout.writeLine("Using stored site: \(stored.name) (gateway: \(stored.gatewayMac))")
-                return stored
-            }
+    do {
+        if let stored = try await selectedSiteStore.load(selectedSiteAccount) {
+            await stdout.writeLine("Using stored site: \(stored.name) (gateway: \(stored.gatewayMac))")
+            return stored
+        }
         } catch {
             await stderr.writeLine("Failed to load stored site: \(error)")
         }
@@ -688,37 +697,61 @@ private func resolveSelectedSite(
             await printSites(sites, stdout: stdout)
             return nil
         }
-        let index: Int
+        let chosenIndex: Int?
         if let providedIndex = siteIndex {
-            guard sites.indices.contains(providedIndex) else {
-                await stderr.writeLine("Invalid --site-index \(providedIndex). Available range: 0...\(max(0, sites.count - 1)).")
-                return nil
-            }
-            index = providedIndex
+            chosenIndex = providedIndex
         } else {
-            guard let selection = await chooseSiteIndex(sites, stdout: stdout, stderr: stderr) else {
-                return nil
-            }
-            index = selection
+            chosenIndex = await chooseSiteIndex(sites, stdout: stdout, stderr: stderr)
         }
-        let site = sites[index]
-        guard let gateway = site.gateways.first else {
-            await stderr.writeLine("Selected site has no gateways.")
+        guard let chosenIndex else { return nil }
+        let selectedResult = selectSite(from: sites, index: chosenIndex)
+        switch selectedResult {
+        case .success(let selected):
+            do {
+                try await selectedSiteStore.save(selectedSiteAccount, selected)
+            } catch {
+                await stderr.writeLine("Failed to persist selected site: \(error)")
+            }
+            await stdout.writeLine("Selected site: \(selected.name) (gateway: \(selected.gatewayMac))")
+            return selected
+        case .failure(let error):
+            await stderr.writeLine(error.message(siteCount: sites.count))
             return nil
         }
-        let selected = TydomSelectedSite(id: site.id, name: site.name, gatewayMac: gateway.mac)
-        do {
-            try await selectedSiteStore.save(selectedSiteAccount, selected)
-        } catch {
-            await stderr.writeLine("Failed to persist selected site: \(error)")
-        }
-        await stdout.writeLine("Selected site: \(site.name) (gateway: \(gateway.mac))")
-        return selected
     } catch {
         session.invalidateAndCancel()
         await stderr.writeLine("Failed to fetch sites: \(error)")
         return nil
     }
+}
+
+private enum SiteSelectionError: Error, Sendable {
+    case invalidIndex(Int)
+    case missingGateway(String)
+
+    func message(siteCount: Int) -> String {
+        switch self {
+        case .invalidIndex(let index):
+            return "Invalid site index \(index). Available range: 0...\(max(0, siteCount - 1))."
+        case .missingGateway(let name):
+            return "Selected site has no gateways: \(name)."
+        }
+    }
+}
+
+private func selectSite(
+    from sites: [TydomCloudSitesProvider.Site],
+    index: Int
+) -> Result<TydomSelectedSite, SiteSelectionError> {
+    guard sites.indices.contains(index) else {
+        return .failure(.invalidIndex(index))
+    }
+    let site = sites[index]
+    guard let gateway = site.gateways.first else {
+        return .failure(.missingGateway(site.name))
+    }
+    let selected = TydomSelectedSite(id: site.id, name: site.name, gatewayMac: gateway.mac)
+    return .success(selected)
 }
 
 private func chooseSiteIndex(
