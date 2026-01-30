@@ -189,8 +189,8 @@ func resolveExplicitConfiguration(
 
 private func makeClient() -> DeltaDoreClient {
     DeltaDoreClient.live(
-        credentialService: "com.deltadore.tydom.cli",
-        selectedSiteService: "com.deltadore.tydom.cli.site-selection"
+        credentialService: "io.sideeffect.deltadoreclient.cli",
+        selectedSiteService: "io.sideeffect.deltadoreclient.cli.site-selection"
     )
 }
 
