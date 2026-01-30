@@ -43,8 +43,8 @@ try await client.resetSelectedSite(selectedSiteAccount: "default")
 
 ```swift
 let client = DeltaDoreClient.live(
-    credentialService: "com.example.tydom.gateway",
-    selectedSiteService: "com.example.tydom.selected-site",
+    credentialService: "io.sideeffect.deltadoreclient.gateway",
+    selectedSiteService: "io.sideeffect.deltadoreclient.selected-site",
     remoteHost: "mediation.tydom.com"
 )
 ```

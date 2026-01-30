@@ -57,8 +57,8 @@ public struct DeltaDoreClient: Sendable {
         }
 
         public static func live(
-            credentialService: String = "com.deltadore.tydom.gateway",
-            selectedSiteService: String = "com.deltadore.tydom.selected-site",
+            credentialService: String = "io.sideeffect.deltadoreclient.gateway",
+            selectedSiteService: String = "io.sideeffect.deltadoreclient.selected-site",
             remoteHost: String = "mediation.tydom.com",
             now: @escaping @Sendable () -> Date = { Date() }
         ) -> Dependencies {
@@ -103,8 +103,8 @@ public struct DeltaDoreClient: Sendable {
     }
 
     public static func live(
-        credentialService: String = "com.deltadore.tydom.gateway",
-        selectedSiteService: String = "com.deltadore.tydom.selected-site",
+        credentialService: String = "io.sideeffect.deltadoreclient.gateway",
+        selectedSiteService: String = "io.sideeffect.deltadoreclient.selected-site",
         remoteHost: String = "mediation.tydom.com",
         now: @escaping @Sendable () -> Date = { Date() }
     ) -> DeltaDoreClient {
