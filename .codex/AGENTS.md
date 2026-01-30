@@ -9,14 +9,14 @@ Agents working with this repo (AI assistants, automation tools, or new team memb
 - Testability via injecting functions and capabilities
 - Our Git workflow (linear history, feature branches, fast-forward merges)
 
-> This high-level overview provides context. Detailed procedural steps and examples are available through dedicated **Agent Skills** in `skills/`.
+> This high-level overview provides context. Read the doc and find detailed procedural steps and examples through dedicated **Agent Skills** in `skills/`.
 
 ---
 
 ## Plan
 
 For long reasoning operations and complex tasks we do an execution plan upfront and ask for validation.
-When executing the plan, you can use parallel tasks/sub-agents to optimize the execution and ask sub-agents to challenge you.
+When executing the plan, you can use parallel tasks/sub-agents to optimize the execution and ask sub-agents to challenge themselves and the main agent.
 
 ---
 
